@@ -1,0 +1,70 @@
+<file> ::= <opt_ws> (<statement> <opt_ws>)*
+
+<statement> ::= <defun>
+              | <var>
+              | <expression>
+
+<defun> ::= "(" <opt_ws> "defun" <ws> <symbol> <opt_ws> "(" <opt_ws> (<symbol> (<ws> <symbol>)*)? ")" <opt_ws> <expression> <opt_ws> ")"
+
+<var> ::= "(" <opt_ws> "var" <opt_ws> <expression> <opt_ws> ")"
+
+<expression> ::= <application>
+               | <progn>
+               | <symbol>
+               | <literal>
+
+<application> ::= "(" <opt_ws> <symbol> <opt_ws> (<expression> <opt_ws>)* ")"
+
+<progn> ::= "(" <opt_ws> "progn" <opt_ws> ((<expression> | <var>) <opt_ws>)* ")"
+
+<literal> ::= <int>
+            | <float>
+            | <string>
+
+<int> ::= "-"? [0-9]+ <int_type_specifier>?
+            
+<float> ::= "-"? [0-9]+ "." [0-9]* <float_type_specifier>?
+
+<string> ::= "\"" <string_fragment>* "\""
+
+# "[^\\\"]+" signifies the regex /[^\\\"]+/, which I don't think is supported in
+# ENBF.
+<string_fragment> ::= "[^\\\"]+"
+                    | "\\n"
+                    | "\\0"
+                    | "\\a"
+                    | "\\b"
+                    | "\\t"
+                    | "\\n"
+                    | "\\v"
+                    | "\\f"
+                    | "\\r"
+                    | "\\e"
+                    | "\\s"
+                    | "\\\""
+                    | "\\\\"
+                    | "\\d"
+
+<int_type_specifier> ::= "i32"
+                       | "u32"
+                       | "i64"
+                       | "u64"
+
+<float_type_specifier> ::= "f32"
+                         | "f64"
+
+<symbol> ::= "-"? <first_symbol_char> (<first_symbol_char> | [0-9])*
+<first_symbol_char> ::= [a-z]
+                      | [A-Z]
+                      | "+"
+                      | "-"
+                      | "/"
+                      | "="
+                      | "<"
+                      | ">"
+                      | "!"
+                      | "?"
+                      | "_"
+
+<opt_ws> ::= <ws>?
+<ws> ::= (" " | "\t" | "\r" | "\n")+
