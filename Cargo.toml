@@ -1,0 +1,12 @@
+[package]
+name = "ship"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arc-slice = "0.1.0"
+regex = "1.11.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+strum = "0.27.2"
+strum_macros = "0.27.2"
