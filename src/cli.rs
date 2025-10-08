@@ -30,7 +30,10 @@ pub fn cli() -> anyhow::Result<()> {
         process::exit(1);
     }
 
+    let mut did_anything = false;
+
     if let Some(ast_path) = args.ast {
+        did_anything = true;
         let mut file: Box<dyn io::Write> = if ast_path.to_str() == Some("-") {
             Box::new(io::stdout())
         } else {
@@ -44,6 +47,10 @@ pub fn cli() -> anyhow::Result<()> {
 
         serde_json::to_writer_pretty(&mut file, &program)?;
         file.write(b"\n")?;
+    }
+
+    if !did_anything {
+        println!("Nothing to be done. See `--help` for the available operations.")
     }
 
     Ok(())
