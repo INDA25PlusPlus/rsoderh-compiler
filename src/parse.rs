@@ -419,8 +419,6 @@ impl Parser for syntax::Literal {
     {
         if let Ok(int) = syntax::Int::parse_from(document) {
             Ok(syntax::Literal::Int(int))
-        } else if let Ok(float) = syntax::Float::parse_from(document) {
-            Ok(syntax::Literal::Float(float))
         } else if let Ok(string) = syntax::StringLiteral::parse_from(document) {
             Ok(syntax::Literal::String(string))
         } else {
@@ -442,32 +440,10 @@ impl Parser for syntax::Int {
             Some(int) => Ok(Self {
                 sign: int.sign,
                 digits: int.int.as_ref().into(),
-                type_specifier: int.type_specifier,
             }),
             None => Err(GenericParseError::new(
                 document.clone(),
                 NodeType::Int,
-                "float",
-            )),
-        }
-    }
-}
-
-impl Parser for syntax::Float {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
-    where
-        Self: Sized,
-    {
-        match lex::FloatLiteral::token(document) {
-            Some(float) => Ok(Self {
-                sign: float.sign,
-                fract: float.fract.as_ref().into(),
-                int: float.int.as_ref().into(),
-                type_specifier: float.type_specifier,
-            }),
-            None => Err(GenericParseError::new(
-                document.clone(),
-                NodeType::Float,
                 "float",
             )),
         }

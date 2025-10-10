@@ -9,8 +9,6 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 
-use crate::syntax::{FloatTypeSpecifier, IntTypeSpecifier};
-
 #[derive(Clone, PartialEq, Eq)]
 pub struct Document {
     document: ArcSlice<str>,
@@ -112,7 +110,6 @@ pub enum Token {
     WhiteSpace(WhiteSpace),
     OpenParen(OpenParen),
     CloseParen(CloseParen),
-    FloatLiteral(FloatLiteral),
     IntLiteral(IntLiteral),
 }
 
@@ -122,7 +119,6 @@ impl Display for Token {
             Token::WhiteSpace(white_space) => write!(f, "{}", white_space),
             Token::OpenParen(open_paren) => write!(f, "{}", open_paren),
             Token::CloseParen(close_paren) => write!(f, "{}", close_paren),
-            Token::FloatLiteral(float_literal) => write!(f, "{}", float_literal),
             Token::IntLiteral(int_literal) => write!(f, "{}", int_literal),
         }
     }
@@ -138,9 +134,6 @@ impl Tokenizer for Token {
         }
         if let Some(token) = CloseParen::token(document) {
             return Some(Self::CloseParen(token));
-        }
-        if let Some(token) = FloatLiteral::token(document) {
-            return Some(Self::FloatLiteral(token));
         }
         if let Some(token) = IntLiteral::token(document) {
             return Some(Self::IntLiteral(token));
@@ -178,31 +171,9 @@ impl Display for CloseParen {
 }
 
 #[derive(Debug)]
-pub struct FloatLiteral {
-    pub sign: Sign,
-    pub int: ArcSlice<str>,
-    pub fract: ArcSlice<str>,
-    pub type_specifier: Option<super::syntax::FloatTypeSpecifier>,
-}
-
-impl Display for FloatLiteral {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.sign == Sign::Negative {
-            f.write_char('-')?;
-        }
-        write!(f, "{}.{}", self.int, self.fract)?;
-        if let Some(specifier) = self.type_specifier {
-            write!(f, "{}", specifier)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
 pub struct IntLiteral {
     pub sign: Sign,
     pub int: ArcSlice<str>,
-    pub type_specifier: Option<super::syntax::IntTypeSpecifier>,
 }
 
 impl Display for IntLiteral {
@@ -211,9 +182,6 @@ impl Display for IntLiteral {
             f.write_char('-')?;
         }
         f.write_str(&self.int)?;
-        if let Some(specifier) = self.type_specifier {
-            write!(f, "{}", specifier)?;
-        }
         Ok(())
     }
 }
@@ -336,41 +304,10 @@ impl Tokenizer for CloseParen {
     }
 }
 
-impl Tokenizer for FloatLiteral {
-    fn token(document: &mut Document) -> Option<Self> {
-        static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new("^(-)?([0-9]+)\\.([0-9]*)(f32|f64)?").expect("regex is valid")
-        });
-
-        document.strip_prefix_captures(&PATTERN).map(|capt| Self {
-            sign: capt
-                .get(1)
-                .map(|_| Sign::Negative)
-                .unwrap_or(Sign::Positive),
-            int: document.document.subslice_from_ref(
-                capt.get(2)
-                    .expect("pattern always includes group 2")
-                    .as_str(),
-            ),
-            fract: document.document.subslice_from_ref(
-                capt.get(3)
-                    .expect("pattern always includes group 3")
-                    .as_str(),
-            ),
-            type_specifier: capt.get(4).map(|match_| match match_.as_str() {
-                "f32" => FloatTypeSpecifier::F32,
-                "f64" => FloatTypeSpecifier::F64,
-                _ => panic!("Can only match f32 or f64"),
-            }),
-        })
-    }
-}
-
 impl Tokenizer for IntLiteral {
     fn token(document: &mut Document) -> Option<Self> {
-        static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new("^(-)?([0-9]+)(i32|u32|i64|u64)?").expect("regex is valid")
-        });
+        static PATTERN: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new("^(-)?([0-9]+)").expect("regex is valid"));
 
         document.strip_prefix_captures(&PATTERN).map(|capt| Self {
             sign: capt
@@ -382,13 +319,6 @@ impl Tokenizer for IntLiteral {
                     .expect("pattern always includes group 2")
                     .as_str(),
             ),
-            type_specifier: capt.get(3).map(|match_| match match_.as_str() {
-                "i32" => IntTypeSpecifier::I32,
-                "u32" => IntTypeSpecifier::U32,
-                "i64" => IntTypeSpecifier::I64,
-                "u64" => IntTypeSpecifier::U64,
-                _ => panic!("can only match i32, u32, i64, or u64"),
-            }),
         })
     }
 }

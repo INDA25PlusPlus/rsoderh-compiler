@@ -21,14 +21,12 @@ fn parse_file() {
                     syntax::Int {
                         sign: Sign::Positive,
                         digits: "1".into(),
-                        type_specifier: None
                     }
                 ))),
                 syntax::Statement::Expression(syntax::Expression::Literal(syntax::Literal::Int(
                     syntax::Int {
                         sign: Sign::Positive,
                         digits: "1".into(),
-                        type_specifier: None
                     }
                 )))
             ]
@@ -78,7 +76,6 @@ fn parse_expression() {
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "3".into(),
-                    type_specifier: None
                 })),
             )]
             .into()
@@ -98,27 +95,22 @@ fn parse_application() {
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "1".into(),
-                    type_specifier: None
                 })),
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "2".into(),
-                    type_specifier: None
                 })),
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "3".into(),
-                    type_specifier: None
                 })),
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "4".into(),
-                    type_specifier: None
                 })),
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "5".into(),
-                    type_specifier: None
                 })),
             ]
             .into(),
@@ -139,7 +131,6 @@ fn parse_progn() {
                     value: syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                         sign: Sign::Positive,
                         digits: "4".into(),
-                        type_specifier: None
                     }))
                 }),
                 syntax::VarExpression::Expression(syntax::Expression::Symbol(syntax::Symbol(
@@ -160,51 +151,19 @@ fn parse_literal() {
         Ok(syntax::Literal::Int(syntax::Int {
             sign: Sign::Positive,
             digits: "5".into(),
-            type_specifier: None,
         }))
     );
 }
 
 #[test]
 fn parse_int() {
-    let mut document = Document::from_str("-5u32");
+    let mut document = Document::from_str("-5");
     assert_parse!(
         syntax::Int,
         document,
         Ok(syntax::Int {
             sign: Sign::Negative,
             digits: "5".into(),
-            type_specifier: Some(syntax::IntTypeSpecifier::U32),
-        })
-    );
-}
-
-#[test]
-fn parse_float_negative_complete() {
-    let mut document = Document::from_str("-123.456");
-    assert_parse!(
-        syntax::Float,
-        document,
-        Ok(syntax::Float {
-            sign: Sign::Negative,
-            int: "123".into(),
-            fract: "456".into(),
-            type_specifier: None,
-        })
-    );
-}
-
-#[test]
-fn parse_float_positive_partial_f64() {
-    let mut document = Document::from_str("123.f64");
-    assert_parse!(
-        syntax::Float,
-        document,
-        Ok(syntax::Float {
-            sign: Sign::Positive,
-            int: "123".into(),
-            fract: "".into(),
-            type_specifier: Some(syntax::FloatTypeSpecifier::F64),
         })
     );
 }

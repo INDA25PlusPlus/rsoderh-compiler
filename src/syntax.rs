@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use strum_macros::{Display, EnumString};
 
 use crate::lex::Sign;
 
@@ -73,7 +72,6 @@ pub enum VarExpression {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Literal {
     Int(Int),
-    Float(Float),
     String(StringLiteral),
 }
 
@@ -81,35 +79,6 @@ pub enum Literal {
 pub struct Int {
     pub sign: Sign,
     pub digits: String,
-    pub type_specifier: Option<IntTypeSpecifier>,
-}
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Float {
-    pub sign: Sign,
-    pub int: String,
-    pub fract: String,
-    pub type_specifier: Option<FloatTypeSpecifier>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumString, Display)]
-pub enum IntTypeSpecifier {
-    #[strum(serialize = "i32")]
-    I32,
-    #[strum(serialize = "u32")]
-    U32,
-    #[strum(serialize = "i64")]
-    I64,
-    #[strum(serialize = "u64")]
-    U64,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, EnumString, Display)]
-pub enum FloatTypeSpecifier {
-    #[strum(serialize = "f32")]
-    F32,
-    #[strum(serialize = "f64")]
-    F64,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]

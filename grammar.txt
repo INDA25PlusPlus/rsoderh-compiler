@@ -18,12 +18,9 @@
 <progn> ::= "(" <opt_ws> "progn" <opt_ws> ((<expression> | <var>) <opt_ws>)* ")"
 
 <literal> ::= <int>
-            | <float>
             | <string>
 
-<int> ::= "-"? [0-9]+ <int_type_specifier>?
-            
-<float> ::= "-"? [0-9]+ "." [0-9]* <float_type_specifier>?
+<int> ::= "-"? [0-9]+
 
 <string> ::= "\"" <string_fragment>* "\""
 
@@ -44,14 +41,6 @@
                     | "\\\""
                     | "\\\\"
                     | "\\d"
-
-<int_type_specifier> ::= "i32"
-                       | "u32"
-                       | "i64"
-                       | "u64"
-
-<float_type_specifier> ::= "f32"
-                         | "f64"
 
 <symbol> ::= "-"? <first_symbol_char> (<first_symbol_char> | [0-9])*
 <first_symbol_char> ::= [a-z]
