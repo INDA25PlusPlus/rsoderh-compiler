@@ -6,6 +6,7 @@
         "ENBF",
         "litteräl",
         "progn",
-        "serde"
+        "serde",
+        "ünicode"
     ]
 }
