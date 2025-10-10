@@ -4,12 +4,7 @@ use super::*;
 
 macro_rules! assert_parse {
     ($node_type:ty, $document:expr, $result:expr $(,)?) => {
-        // let result = ;
-        assert_eq!(
-            <$node_type>::parse_from(&mut $document),
-            // $node_type::parse_from(&mut $document),
-            $result,
-        );
+        assert_eq!(<$node_type>::parse_from(&mut $document), $result,);
         assert_eq!($document.rest().len(), 0);
     };
 }

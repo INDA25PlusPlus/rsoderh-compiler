@@ -41,22 +41,6 @@ impl Document {
         &self.document[self.pos()..]
     }
 
-    #[deprecated]
-    pub fn with_remaining_len<'b>(&'b self, len: usize) -> Self {
-        Self {
-            document: self.document.clone(),
-            pos: RefCell::new(self.document.len() - len),
-        }
-    }
-
-    #[deprecated]
-    pub fn with_consumed<'b>(&'b self, len: usize) -> Self {
-        Self {
-            document: self.document.clone(),
-            pos: RefCell::new(self.pos() + len),
-        }
-    }
-
     pub fn set_remaining_len(&self, len: usize) -> () {
         *self.pos.borrow_mut() = self.document.len() - len;
     }
@@ -64,26 +48,6 @@ impl Document {
     pub fn consume(&self, len: usize) -> () {
         *self.pos.borrow_mut() += len;
     }
-
-    // /// Update internal position by generating a length of the rest string using the specified
-    // /// function. The function takes the current rest and should return the new length of remaining
-    // /// bytes.
-    // pub fn update_len<F>(&mut self, updater: F)
-    // where
-    //     F: FnOnce(&str) -> usize,
-    // {
-    //     self.set_remaining_len(updater(&self.document[self.pos..]));
-    // }
-
-    // /// Update internal position by shifting it an amount of bytes generating using the specified
-    // /// function. The function takes the current rest and must return the amount of bytes to
-    // /// consume.
-    // pub fn update_consumed<F>(&mut self, updater: F)
-    // where
-    //     F: FnOnce(&str) -> usize,
-    // {
-    //     self.consume(updater(&self.document[self.pos..]));
-    // }
 
     pub fn strip_prefix(&self, prefix: &str) -> Option<()> {
         if self.rest().starts_with(prefix) {
