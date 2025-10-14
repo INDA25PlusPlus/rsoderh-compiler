@@ -15,7 +15,7 @@ fn parse_file() {
     assert_parse!(
         syntax::File,
         document,
-        Ok(syntax::File {
+        Ok(Some(syntax::File {
             statements: vec![
                 syntax::Statement::Expression(syntax::Expression::Literal(syntax::Literal::Int(
                     syntax::Int {
@@ -31,7 +31,7 @@ fn parse_file() {
                 )))
             ]
             .into(),
-        })
+        }))
     );
 }
 
@@ -41,11 +41,11 @@ fn parse_defun() {
     assert_parse!(
         syntax::Defun,
         document,
-        Ok(syntax::Defun {
+        Ok(Some(syntax::Defun {
             name: syntax::Symbol("my-fun".into()),
             arguments: vec![].into(),
             body: syntax::Expression::Symbol(syntax::Symbol("nil".into())),
-        })
+        }))
     );
 }
 
@@ -55,13 +55,13 @@ fn parse_var() {
     assert_parse!(
         syntax::Var,
         document,
-        Ok(syntax::Var {
+        Ok(Some(syntax::Var {
             name: syntax::Symbol("a".into()),
             value: syntax::Expression::Application(syntax::Application {
                 function: syntax::Symbol("fun".into()),
                 args: vec![].into()
             }),
-        })
+        }))
     );
 }
 
@@ -71,7 +71,7 @@ fn parse_expression() {
     assert_parse!(
         syntax::Expression,
         document,
-        Ok(syntax::Expression::Progn(syntax::Progn {
+        Ok(Some(syntax::Expression::Progn(syntax::Progn {
             expressions: vec![syntax::VarExpression::Expression(
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
@@ -79,7 +79,7 @@ fn parse_expression() {
                 })),
             )]
             .into()
-        }))
+        })))
     );
 }
 
@@ -89,7 +89,7 @@ fn parse_application() {
     assert_parse!(
         syntax::Application,
         document,
-        Ok(syntax::Application {
+        Ok(Some(syntax::Application {
             function: syntax::Symbol("fun".into()),
             args: vec![
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
@@ -114,7 +114,7 @@ fn parse_application() {
                 })),
             ]
             .into(),
-        })
+        }))
     );
 }
 
@@ -124,7 +124,7 @@ fn parse_progn() {
     assert_parse!(
         syntax::Progn,
         document,
-        Ok(syntax::Progn {
+        Ok(Some(syntax::Progn {
             expressions: vec![
                 syntax::VarExpression::Var(syntax::Var {
                     name: syntax::Symbol("a".into()),
@@ -138,7 +138,7 @@ fn parse_progn() {
                 )),)
             ]
             .into()
-        })
+        }))
     );
 }
 
@@ -148,10 +148,10 @@ fn parse_literal() {
     assert_parse!(
         syntax::Literal,
         document,
-        Ok(syntax::Literal::Int(syntax::Int {
+        Ok(Some(syntax::Literal::Int(syntax::Int {
             sign: Sign::Positive,
             digits: "5".into(),
-        }))
+        })))
     );
 }
 
@@ -161,10 +161,10 @@ fn parse_int() {
     assert_parse!(
         syntax::Int,
         document,
-        Ok(syntax::Int {
+        Ok(Some(syntax::Int {
             sign: Sign::Negative,
             digits: "5".into(),
-        })
+        }))
     );
 }
 
@@ -174,7 +174,7 @@ fn parse_string_literal_simple() {
     assert_parse!(
         syntax::StringLiteral,
         document,
-        Ok(syntax::StringLiteral("string litteräl".into()))
+        Ok(Some(syntax::StringLiteral("string litteräl".into())))
     );
 }
 
@@ -184,9 +184,9 @@ fn parse_string_literal_escapes() {
     assert_parse!(
         syntax::StringLiteral,
         document,
-        Ok(syntax::StringLiteral(
+        Ok(Some(syntax::StringLiteral(
             "string\n\t\x07fragment\x00\"\\ \x08\x1b\x7f".into()
-        ))
+        )))
     );
 }
 
@@ -196,19 +196,27 @@ fn parse_symbol_1() {
     assert_parse!(
         syntax::Symbol,
         document,
-        Ok(syntax::Symbol("defun!?_".into()))
+        Ok(Some(syntax::Symbol("defun!?_".into())))
     );
 }
 
 #[test]
 fn parse_symbol_2() {
     let mut document = Document::from_str("_");
-    assert_parse!(syntax::Symbol, document, Ok(syntax::Symbol("_".into())));
+    assert_parse!(
+        syntax::Symbol,
+        document,
+        Ok(Some(syntax::Symbol("_".into())))
+    );
 }
 
 #[test]
 fn parse_symbol_consumed() {
     let mut document = Document::from_str("(defun");
     document.consume(1);
-    assert_parse!(syntax::Symbol, document, Ok(syntax::Symbol("defun".into())));
+    assert_parse!(
+        syntax::Symbol,
+        document,
+        Ok(Some(syntax::Symbol("defun".into())))
+    );
 }

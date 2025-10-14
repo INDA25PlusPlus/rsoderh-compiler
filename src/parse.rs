@@ -9,52 +9,49 @@ use crate::{
 mod tests;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct GenericParseError {
+pub struct ParseError {
     document: Document,
     /// The type of node which was being parsed.
     node_type: NodeType,
-    expected_token: &'static str,
+    expected: &'static str,
 }
 
-impl GenericParseError {
-    pub fn new(document: Document, node_type: NodeType, expected_token: &'static str) -> Self {
+impl ParseError {
+    pub fn new(document: Document, node_type: NodeType, expected: &'static str) -> Self {
         Self {
             document,
             node_type,
-            expected_token,
+            expected,
         }
     }
 }
 
-impl Display for GenericParseError {
+impl Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(found) = lex::Token::token(&mut self.document.clone()) {
-            write!(
-                f,
-                "Invalid token {} at {}, expected {}",
-                found,
-                self.document.pos(),
-                self.expected_token
-            )
-        } else {
-            write!(
-                f,
-                "Expected {} token at {}",
-                self.expected_token,
-                self.document.pos()
-            )
+        let found = lex::AnyToken::token(&mut self.document.clone());
+
+        write!(f, "Expected {}, but", self.expected,)?;
+
+        match found {
+            lex::AnyToken::Valid(token) => write!(f, " encountered token {}", token)?,
+            lex::AnyToken::Invalid(invalid_token) => {
+                write!(f, " encountered invalid token {}", invalid_token)?
+            }
+            lex::AnyToken::Eof(_) => f.write_str(" reached end of file")?,
         }
+
+        write!(f, " at {}", self.document.row_column(),)
     }
 }
 
 pub trait Parser {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized;
 }
 
 impl Parser for syntax::File {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
@@ -65,7 +62,7 @@ impl Parser for syntax::File {
         let mut statements = Vec::new();
 
         loop {
-            if let Ok(arg) = syntax::Statement::parse_from(&mut parsed_document) {
+            if let Some(arg) = syntax::Statement::parse_from(&mut parsed_document)? {
                 statements.push(arg);
                 _ = lex::WhiteSpace::token(&mut parsed_document);
             } else {
@@ -74,91 +71,67 @@ impl Parser for syntax::File {
         }
 
         *document = parsed_document;
-        Ok(Self {
+        Ok(Some(Self {
             statements: statements.into(),
-        })
+        }))
     }
 }
 
 impl Parser for syntax::Statement {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
-        if let Ok(node) = syntax::Defun::parse_from(document) {
-            Ok(syntax::Statement::Defun(node))
-        } else if let Ok(node) = syntax::Var::parse_from(document) {
-            Ok(syntax::Statement::Var(node))
-        } else if let Ok(node) = syntax::Expression::parse_from(document) {
-            Ok(syntax::Statement::Expression(node))
+        if let Some(node) = syntax::Defun::parse_from(document)? {
+            Ok(Some(syntax::Statement::Defun(node)))
+        } else if let Some(node) = syntax::Var::parse_from(document)? {
+            Ok(Some(syntax::Statement::Var(node)))
+        } else if let Some(node) = syntax::Expression::parse_from(document)? {
+            Ok(Some(syntax::Statement::Expression(node)))
         } else {
-            Err(GenericParseError::new(
-                document.clone(),
-                NodeType::Statement,
-                "defun or var or expression",
-            ))
+            Ok(None)
         }
     }
 }
 
 impl Parser for syntax::Defun {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
         let mut parsed_document = document.clone();
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Defun,
-                "'('",
-            ));
+            return Ok(None);
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
-        let Ok(symbol) = syntax::Symbol::parse_from(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Defun,
-                "symbol `defun`",
-            ));
+        let Some(symbol) = syntax::Symbol::parse_from(&mut parsed_document)? else {
+            return Ok(None);
         };
 
         if &symbol.0 != "defun" {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Defun,
-                "symbol `defun`",
-            ));
+            return Ok(None);
         }
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
-        let Ok(name) = syntax::Symbol::parse_from(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Defun,
-                "symbol",
-            ));
+        let Some(name) = syntax::Symbol::parse_from(&mut parsed_document)? else {
+            return Err(ParseError::new(parsed_document, NodeType::Defun, "symbol"));
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Defun,
-                "'('",
-            ));
+            return Err(ParseError::new(parsed_document, NodeType::Defun, "'('"));
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
         let mut arguments = Vec::new();
         loop {
-            if let Ok(arg) = syntax::Symbol::parse_from(&mut parsed_document) {
+            if let Some(arg) = syntax::Symbol::parse_from(&mut parsed_document)? {
                 arguments.push(arg);
                 _ = lex::WhiteSpace::token(&mut parsed_document);
             } else {
@@ -167,17 +140,13 @@ impl Parser for syntax::Defun {
         }
 
         let Some(_) = lex::CloseParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Defun,
-                "')'",
-            ));
+            return Err(ParseError::new(parsed_document, NodeType::Defun, "')'"));
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
-        let Ok(body) = syntax::Expression::parse_from(&mut parsed_document) else {
-            return Err(GenericParseError::new(
+        let Some(body) = syntax::Expression::parse_from(&mut parsed_document)? else {
+            return Err(ParseError::new(
                 parsed_document,
                 NodeType::Defun,
                 "expression",
@@ -187,69 +156,49 @@ impl Parser for syntax::Defun {
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
         let Some(_) = lex::CloseParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Defun,
-                "')'",
-            ));
+            return Err(ParseError::new(parsed_document, NodeType::Defun, "')'"));
         };
 
         *document = parsed_document;
-        Ok(Self {
+        Ok(Some(Self {
             name,
             arguments: arguments.into(),
             body,
-        })
+        }))
     }
 }
 
 impl Parser for syntax::Var {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
         let mut parsed_document = document.clone();
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Var,
-                "'('",
-            ));
+            return Ok(None);
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
-        let Ok(symbol) = syntax::Symbol::parse_from(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Var,
-                "symbol `var`",
-            ));
+        let Some(symbol) = syntax::Symbol::parse_from(&mut parsed_document)? else {
+            return Ok(None);
         };
 
         if &symbol.0 != "var" {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Var,
-                "symbol `var`",
-            ));
+            return Ok(None);
         }
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
-        let Ok(name) = syntax::Symbol::parse_from(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Var,
-                "symbol",
-            ));
+        let Some(name) = syntax::Symbol::parse_from(&mut parsed_document)? else {
+            return Err(ParseError::new(parsed_document, NodeType::Var, "symbol"));
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
-        let Ok(value) = syntax::Expression::parse_from(&mut parsed_document) else {
-            return Err(GenericParseError::new(
+        let Some(value) = syntax::Expression::parse_from(&mut parsed_document)? else {
+            return Err(ParseError::new(
                 parsed_document,
                 NodeType::Var,
                 "expression",
@@ -259,64 +208,48 @@ impl Parser for syntax::Var {
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
         let Some(_) = lex::CloseParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Var,
-                "')'",
-            ));
+            return Err(ParseError::new(parsed_document, NodeType::Var, "')'"));
         };
 
         *document = parsed_document;
-        Ok(Self { name, value })
+        Ok(Some(Self { name, value }))
     }
 }
 
 impl Parser for syntax::Expression {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
-        if let Ok(node) = syntax::Progn::parse_from(document) {
-            Ok(syntax::Expression::Progn(node))
-        } else if let Ok(node) = syntax::Application::parse_from(document) {
-            Ok(syntax::Expression::Application(node))
-        } else if let Ok(node) = syntax::Symbol::parse_from(document) {
-            Ok(syntax::Expression::Symbol(node))
-        } else if let Ok(node) = syntax::Literal::parse_from(document) {
-            Ok(syntax::Expression::Literal(node))
+        if let Some(node) = syntax::Progn::parse_from(document)? {
+            Ok(Some(syntax::Expression::Progn(node)))
+        } else if let Some(node) = syntax::Application::parse_from(document)? {
+            Ok(Some(syntax::Expression::Application(node)))
+        } else if let Some(node) = syntax::Symbol::parse_from(document)? {
+            Ok(Some(syntax::Expression::Symbol(node)))
+        } else if let Some(node) = syntax::Literal::parse_from(document)? {
+            Ok(Some(syntax::Expression::Literal(node)))
         } else {
-            Err(GenericParseError::new(
-                document.clone(),
-                NodeType::Expression,
-                "progn or application or symbol or literal",
-            ))
+            Ok(None)
         }
     }
 }
 
 impl Parser for syntax::Application {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
         let mut parsed_document = document.clone();
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Application,
-                "'('",
-            ));
+            return Ok(None);
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
-        let Ok(function) = syntax::Symbol::parse_from(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Application,
-                "function symbol",
-            ));
+        let Some(function) = syntax::Symbol::parse_from(&mut parsed_document)? else {
+            return Ok(None);
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
@@ -324,7 +257,7 @@ impl Parser for syntax::Application {
         let mut args = Vec::new();
 
         loop {
-            if let Ok(arg) = syntax::Expression::parse_from(&mut parsed_document) {
+            if let Some(arg) = syntax::Expression::parse_from(&mut parsed_document)? {
                 args.push(arg);
                 _ = lex::WhiteSpace::token(&mut parsed_document);
             } else {
@@ -333,7 +266,7 @@ impl Parser for syntax::Application {
         }
 
         let Some(_) = lex::CloseParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
+            return Err(ParseError::new(
                 parsed_document,
                 NodeType::Application,
                 "')'",
@@ -341,44 +274,32 @@ impl Parser for syntax::Application {
         };
 
         *document = parsed_document;
-        Ok(Self {
+        Ok(Some(Self {
             function,
             args: args.into(),
-        })
+        }))
     }
 }
 
 impl Parser for syntax::Progn {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
         let mut parsed_document = document.clone();
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Progn,
-                "'('",
-            ));
+            return Ok(None);
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
         let Some(symbol) = lex::Symbol::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Progn,
-                "symbol `progn`",
-            ));
+            return Ok(None);
         };
 
         if &symbol.0 != "progn" {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Progn,
-                "symbol `progn`",
-            ));
+            return Ok(None);
         }
 
         let mut expressions = Vec::new();
@@ -386,9 +307,9 @@ impl Parser for syntax::Progn {
         loop {
             _ = lex::WhiteSpace::token(&mut parsed_document);
 
-            if let Ok(var) = syntax::Var::parse_from(&mut parsed_document) {
+            if let Some(var) = syntax::Var::parse_from(&mut parsed_document)? {
                 expressions.push(syntax::VarExpression::Var(var));
-            } else if let Ok(expression) = syntax::Expression::parse_from(&mut parsed_document) {
+            } else if let Some(expression) = syntax::Expression::parse_from(&mut parsed_document)? {
                 expressions.push(syntax::VarExpression::Expression(expression));
             } else {
                 break;
@@ -398,71 +319,55 @@ impl Parser for syntax::Progn {
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
         let Some(_) = lex::CloseParen::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::Progn,
-                "')'",
-            ));
+            return Err(ParseError::new(parsed_document, NodeType::Progn, "')'"));
         };
 
         *document = parsed_document;
-        Ok(Self {
+        Ok(Some(Self {
             expressions: expressions.into(),
-        })
+        }))
     }
 }
 
 impl Parser for syntax::Literal {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
-        if let Ok(int) = syntax::Int::parse_from(document) {
-            Ok(syntax::Literal::Int(int))
-        } else if let Ok(string) = syntax::StringLiteral::parse_from(document) {
-            Ok(syntax::Literal::String(string))
+        if let Some(int) = syntax::Int::parse_from(document)? {
+            Ok(Some(syntax::Literal::Int(int)))
+        } else if let Some(string) = syntax::StringLiteral::parse_from(document)? {
+            Ok(Some(syntax::Literal::String(string)))
         } else {
-            Err(GenericParseError::new(
-                document.clone(),
-                NodeType::Literal,
-                "int or float or string",
-            ))
+            Ok(None)
         }
     }
 }
 
 impl Parser for syntax::Int {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
         match lex::IntLiteral::token(document) {
-            Some(int) => Ok(Self {
+            Some(int) => Ok(Some(Self {
                 sign: int.sign,
                 digits: int.int.as_ref().into(),
-            }),
-            None => Err(GenericParseError::new(
-                document.clone(),
-                NodeType::Int,
-                "float",
-            )),
+            })),
+            None => Ok(None),
         }
     }
 }
 
 impl Parser for syntax::StringLiteral {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
         let mut parsed_document = document.clone();
 
         let Some(_quote) = lex::DoubleQuote::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
-                parsed_document,
-                NodeType::StringLiteral,
-                "'\"'",
-            ));
+            return Ok(None);
         };
 
         let mut string = String::new();
@@ -492,7 +397,7 @@ impl Parser for syntax::StringLiteral {
         }
 
         let Some(_quote) = lex::DoubleQuote::token(&mut parsed_document) else {
-            return Err(GenericParseError::new(
+            return Err(ParseError::new(
                 parsed_document,
                 NodeType::StringLiteral,
                 "'\"' or string fragment",
@@ -500,22 +405,18 @@ impl Parser for syntax::StringLiteral {
         };
 
         *document = parsed_document;
-        Ok(Self(string))
+        Ok(Some(Self(string)))
     }
 }
 
 impl Parser for syntax::Symbol {
-    fn parse_from(document: &mut lex::Document) -> Result<Self, GenericParseError>
+    fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
     {
         match lex::Symbol::token(document) {
-            Some(symbol) => Ok(Self(symbol.0.as_ref().to_owned())),
-            None => Err(GenericParseError::new(
-                document.clone(),
-                NodeType::Symbol,
-                "symbol",
-            )),
+            Some(symbol) => Ok(Some(Self(symbol.0.as_ref().to_owned()))),
+            None => Ok(None),
         }
     }
 }

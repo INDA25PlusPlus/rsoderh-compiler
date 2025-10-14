@@ -18,8 +18,7 @@ struct Args {
 pub fn cli() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let content = fs::read_to_string(args.file)?;
-    let mut document = lex::Document::from_str(&content);
+    let mut document = lex::Document::load(args.file)?;
 
     let program = syntax::File::parse_from(&mut document).map_err(|error| anyhow!("{}", error))?;
 

@@ -1,6 +1,8 @@
 use std::{
     cell::RefCell,
     fmt::{Debug, Display, Write},
+    fs, io,
+    path::PathBuf,
     sync::LazyLock,
 };
 
@@ -9,11 +11,35 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumString;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineColumn {
+    pub line: usize,
+    pub column: usize,
+    pub path: Option<PathBuf>,
+}
+
+impl Display for LineColumn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.path {
+            Some(path) => f.write_str(
+                &path
+                    .file_name()
+                    .expect("surely our path isn't a directory")
+                    .to_string_lossy(),
+            )?,
+            None => f.write_str("<anonymous-file>")?,
+        }
+        write!(f, ":{}:{}", self.line, self.column)
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct Document {
     document: ArcSlice<str>,
     /// Byte offset of remaining text in the original document.
     pos: RefCell<usize>,
+    /// File path which this document represents (if any).
+    path: Option<PathBuf>,
 }
 
 impl Document {
@@ -21,6 +47,7 @@ impl Document {
         Self {
             document: document,
             pos: RefCell::new(0),
+            path: None,
         }
     }
 
@@ -28,7 +55,17 @@ impl Document {
         Self {
             document: ArcSlice::from_slice(string),
             pos: RefCell::new(0),
+            path: None,
         }
+    }
+
+    pub fn load(path: PathBuf) -> io::Result<Self> {
+        let content = fs::read_to_string(&path)?;
+        Ok(Self {
+            document: ArcSlice::from_slice(&content),
+            pos: RefCell::new(0),
+            path: Some(path),
+        })
     }
 
     pub fn pos(&self) -> usize {
@@ -37,6 +74,34 @@ impl Document {
 
     pub fn rest(&self) -> &str {
         &self.document[self.pos()..]
+    }
+
+    /// Calculates the 1-indexed line number and column for the current document position.
+    pub fn row_column(&self) -> LineColumn {
+        self.row_column_for_offset(self.pos())
+    }
+
+    /// Calculates the 1-indexed line number and column for a byte offset.
+    pub fn row_column_for_offset(&self, offset: usize) -> LineColumn {
+        // All bytes before offset.
+        let before = &self.document[..offset];
+
+        let (last_newline_index, last_newline_offset) = before
+            .char_indices()
+            .filter(|(_, chr)| *chr == '\n')
+            .map(|(offset, _)| offset)
+            .enumerate()
+            .last()
+            .unwrap_or((0, 0));
+
+        let line = last_newline_index + 2;
+        let column = before.len() - last_newline_offset + 1;
+
+        LineColumn {
+            line,
+            column,
+            path: self.path.clone(),
+        }
     }
 
     pub fn set_remaining_len(&self, len: usize) -> () {
@@ -106,11 +171,38 @@ pub trait Tokenizer {
         Self: Sized;
 }
 
+pub enum AnyToken {
+    Valid(Token),
+    Invalid(InvalidToken),
+    Eof(Eof),
+}
+
+impl Display for AnyToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Valid(token) => write!(f, "{}", token),
+            Self::Invalid(token) => write!(f, "{}", token),
+            Self::Eof(token) => write!(f, "{}", token),
+        }
+    }
+}
+
+impl AnyToken {
+    pub fn token(document: &mut Document) -> Self {
+        match Token::token(document) {
+            Some(Token::Eof(eof)) => Self::Eof(eof),
+            Some(token) => Self::Valid(token),
+            None => Self::Invalid(InvalidToken::token(document)),
+        }
+    }
+}
+
 pub enum Token {
     WhiteSpace(WhiteSpace),
     OpenParen(OpenParen),
     CloseParen(CloseParen),
     IntLiteral(IntLiteral),
+    Eof(Eof),
 }
 
 impl Display for Token {
@@ -120,6 +212,7 @@ impl Display for Token {
             Token::OpenParen(open_paren) => write!(f, "{}", open_paren),
             Token::CloseParen(close_paren) => write!(f, "{}", close_paren),
             Token::IntLiteral(int_literal) => write!(f, "{}", int_literal),
+            Token::Eof(eof) => write!(f, "{}", eof),
         }
     }
 }
@@ -138,8 +231,29 @@ impl Tokenizer for Token {
         if let Some(token) = IntLiteral::token(document) {
             return Some(Self::IntLiteral(token));
         }
+        if let Some(token) = Eof::token(document) {
+            return Some(Self::Eof(token));
+        }
 
         None
+    }
+}
+
+/// Represents some string of characters which couldn't be tokenized into a valid token.
+#[derive(Debug)]
+pub struct InvalidToken(pub ArcSlice<str>);
+
+impl Display for InvalidToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+pub struct Eof;
+
+impl Display for Eof {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("end of file")
     }
 }
 
@@ -266,6 +380,47 @@ pub struct Symbol(pub ArcSlice<str>);
 impl Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+impl InvalidToken {
+    pub fn token(document: &mut Document) -> Self {
+        let start = document.pos();
+        let mut len = 0;
+
+        loop {
+            let mut document = document.clone();
+            document.consume(len);
+
+            if Token::token(&mut document).is_some() {
+                break;
+            }
+
+            // Length of the next char at the document's position.
+            let Some(char_len) = document
+                .rest()
+                .char_indices()
+                .nth(1)
+                .map(|(index, _)| index)
+            else {
+                // Current position is at EOF.
+                break;
+            };
+
+            len += char_len;
+        }
+
+        document.consume(len);
+        Self(document.document.subslice(start..(start + len)))
+    }
+}
+
+impl Tokenizer for Eof {
+    fn token(document: &mut Document) -> Option<Self> {
+        match document.rest() == "" {
+            true => Some(Self),
+            false => None,
+        }
     }
 }
 
