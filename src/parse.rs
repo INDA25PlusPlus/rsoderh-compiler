@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Range};
 
 use crate::{
     lex::{self, Document, Tokenizer},
@@ -48,6 +48,9 @@ pub trait Parser {
     fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized;
+
+    /// Get the range this node occupies in the source document as a pair of byte offsets.
+    fn span(&self) -> &Range<usize>;
 }
 
 impl Parser for syntax::File {
@@ -56,6 +59,7 @@ impl Parser for syntax::File {
         Self: Sized,
     {
         let mut parsed_document = document.clone();
+        let start = parsed_document.pos();
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
@@ -70,10 +74,17 @@ impl Parser for syntax::File {
             }
         }
 
+        let end = parsed_document.pos();
+
         *document = parsed_document;
         Ok(Some(Self {
             statements: statements.into(),
+            span: start..end,
         }))
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.span
     }
 }
 
@@ -92,6 +103,14 @@ impl Parser for syntax::Statement {
             Ok(None)
         }
     }
+
+    fn span(&self) -> &Range<usize> {
+        match self {
+            syntax::Statement::Defun(node) => node.span(),
+            syntax::Statement::Var(node) => node.span(),
+            syntax::Statement::Expression(node) => node.span(),
+        }
+    }
 }
 
 impl Parser for syntax::Defun {
@@ -100,6 +119,7 @@ impl Parser for syntax::Defun {
         Self: Sized,
     {
         let mut parsed_document = document.clone();
+        let start = parsed_document.pos();
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
             return Ok(None);
@@ -159,12 +179,18 @@ impl Parser for syntax::Defun {
             return Err(ParseError::new(parsed_document, NodeType::Defun, "')'"));
         };
 
+        let end = parsed_document.pos();
         *document = parsed_document;
         Ok(Some(Self {
             name,
             arguments: arguments.into(),
             body,
+            span: start..end,
         }))
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.span
     }
 }
 
@@ -174,6 +200,7 @@ impl Parser for syntax::Var {
         Self: Sized,
     {
         let mut parsed_document = document.clone();
+        let start = parsed_document.pos();
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
             return Ok(None);
@@ -211,8 +238,17 @@ impl Parser for syntax::Var {
             return Err(ParseError::new(parsed_document, NodeType::Var, "')'"));
         };
 
+        let end = parsed_document.pos();
         *document = parsed_document;
-        Ok(Some(Self { name, value }))
+        Ok(Some(Self {
+            name,
+            value,
+            span: start..end,
+        }))
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.span
     }
 }
 
@@ -233,6 +269,15 @@ impl Parser for syntax::Expression {
             Ok(None)
         }
     }
+
+    fn span(&self) -> &Range<usize> {
+        match self {
+            syntax::Expression::Progn(node) => node.span(),
+            syntax::Expression::Application(node) => node.span(),
+            syntax::Expression::Symbol(node) => node.span(),
+            syntax::Expression::Literal(node) => node.span(),
+        }
+    }
 }
 
 impl Parser for syntax::Application {
@@ -241,6 +286,7 @@ impl Parser for syntax::Application {
         Self: Sized,
     {
         let mut parsed_document = document.clone();
+        let start = parsed_document.pos();
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
             return Ok(None);
@@ -273,11 +319,17 @@ impl Parser for syntax::Application {
             ));
         };
 
+        let end = parsed_document.pos();
         *document = parsed_document;
         Ok(Some(Self {
             function,
             args: args.into(),
+            span: start..end,
         }))
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.span
     }
 }
 
@@ -287,6 +339,7 @@ impl Parser for syntax::Progn {
         Self: Sized,
     {
         let mut parsed_document = document.clone();
+        let start = parsed_document.pos();
 
         let Some(_) = lex::OpenParen::token(&mut parsed_document) else {
             return Ok(None);
@@ -322,10 +375,16 @@ impl Parser for syntax::Progn {
             return Err(ParseError::new(parsed_document, NodeType::Progn, "')'"));
         };
 
+        let end = parsed_document.pos();
         *document = parsed_document;
         Ok(Some(Self {
             expressions: expressions.into(),
+            span: start..end,
         }))
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.span
     }
 }
 
@@ -342,6 +401,13 @@ impl Parser for syntax::Literal {
             Ok(None)
         }
     }
+
+    fn span(&self) -> &Range<usize> {
+        match self {
+            syntax::Literal::Int(node) => node.span(),
+            syntax::Literal::String(node) => node.span(),
+        }
+    }
 }
 
 impl Parser for syntax::Int {
@@ -349,13 +415,20 @@ impl Parser for syntax::Int {
     where
         Self: Sized,
     {
+        let start = document.pos();
+
         match lex::IntLiteral::token(document) {
             Some(int) => Ok(Some(Self {
                 sign: int.sign,
                 digits: int.int.as_ref().into(),
+                span: start..document.pos(),
             })),
             None => Ok(None),
         }
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.span
     }
 }
 
@@ -365,6 +438,7 @@ impl Parser for syntax::StringLiteral {
         Self: Sized,
     {
         let mut parsed_document = document.clone();
+        let start = parsed_document.pos();
 
         let Some(_quote) = lex::DoubleQuote::token(&mut parsed_document) else {
             return Ok(None);
@@ -404,8 +478,13 @@ impl Parser for syntax::StringLiteral {
             ));
         };
 
+        let end = parsed_document.pos();
         *document = parsed_document;
-        Ok(Some(Self(string)))
+        Ok(Some(Self(string, start..end)))
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.1
     }
 }
 
@@ -414,9 +493,18 @@ impl Parser for syntax::Symbol {
     where
         Self: Sized,
     {
+        let start = document.pos();
+
         match lex::Symbol::token(document) {
-            Some(symbol) => Ok(Some(Self(symbol.0.as_ref().to_owned()))),
+            Some(symbol) => Ok(Some(Self(
+                symbol.0.as_ref().to_owned(),
+                start..document.pos(),
+            ))),
             None => Ok(None),
         }
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.1
     }
 }

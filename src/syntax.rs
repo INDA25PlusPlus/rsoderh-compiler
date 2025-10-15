@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use serde::{Deserialize, Serialize};
 
 use crate::lex::Sign;
@@ -22,6 +24,7 @@ pub enum NodeType {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct File {
     pub statements: Box<[Statement]>,
+    pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,12 +39,14 @@ pub struct Defun {
     pub name: Symbol,
     pub arguments: Box<[Symbol]>,
     pub body: Expression,
+    pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Var {
     pub name: Symbol,
     pub value: Expression,
+    pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,11 +61,13 @@ pub enum Expression {
 pub struct Application {
     pub function: Symbol,
     pub args: Box<[Expression]>,
+    pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Progn {
     pub expressions: Box<[VarExpression]>,
+    pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,10 +86,11 @@ pub enum Literal {
 pub struct Int {
     pub sign: Sign,
     pub digits: String,
+    pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StringLiteral(pub String);
+pub struct StringLiteral(pub String, pub(crate) Range<usize>);
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Symbol(pub String);
+pub struct Symbol(pub String, pub(crate) Range<usize>);

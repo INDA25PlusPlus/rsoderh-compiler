@@ -21,16 +21,19 @@ fn parse_file() {
                     syntax::Int {
                         sign: Sign::Positive,
                         digits: "1".into(),
+                        span: 1..2,
                     }
                 ))),
                 syntax::Statement::Expression(syntax::Expression::Literal(syntax::Literal::Int(
                     syntax::Int {
                         sign: Sign::Positive,
                         digits: "1".into(),
+                        span: 4..5,
                     }
                 )))
             ]
             .into(),
+            span: 0..9,
         }))
     );
 }
@@ -42,9 +45,10 @@ fn parse_defun() {
         syntax::Defun,
         document,
         Ok(Some(syntax::Defun {
-            name: syntax::Symbol("my-fun".into()),
+            name: syntax::Symbol("my-fun".into(), 8..14),
             arguments: vec![].into(),
-            body: syntax::Expression::Symbol(syntax::Symbol("nil".into())),
+            body: syntax::Expression::Symbol(syntax::Symbol("nil".into(), 16..19)),
+            span: 0..20,
         }))
     );
 }
@@ -56,11 +60,13 @@ fn parse_var() {
         syntax::Var,
         document,
         Ok(Some(syntax::Var {
-            name: syntax::Symbol("a".into()),
+            name: syntax::Symbol("a".into(), 8..9),
             value: syntax::Expression::Application(syntax::Application {
-                function: syntax::Symbol("fun".into()),
-                args: vec![].into()
+                function: syntax::Symbol("fun".into(), 10..13),
+                args: vec![].into(),
+                span: 9..14,
             }),
+            span: 0..18
         }))
     );
 }
@@ -76,9 +82,11 @@ fn parse_expression() {
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "3".into(),
+                    span: 9..10,
                 })),
             )]
-            .into()
+            .into(),
+            span: 0..13,
         })))
     );
 }
@@ -90,30 +98,36 @@ fn parse_application() {
         syntax::Application,
         document,
         Ok(Some(syntax::Application {
-            function: syntax::Symbol("fun".into()),
+            function: syntax::Symbol("fun".into(), 2..5),
             args: vec![
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "1".into(),
+                    span: 6..7,
                 })),
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "2".into(),
+                    span: 8..9,
                 })),
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "3".into(),
+                    span: 10..11,
                 })),
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "4".into(),
+                    span: 12..13,
                 })),
                 syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                     sign: Sign::Positive,
                     digits: "5".into(),
+                    span: 14..15,
                 })),
             ]
             .into(),
+            span: 0..17,
         }))
     );
 }
@@ -127,17 +141,21 @@ fn parse_progn() {
         Ok(Some(syntax::Progn {
             expressions: vec![
                 syntax::VarExpression::Var(syntax::Var {
-                    name: syntax::Symbol("a".into()),
+                    name: syntax::Symbol("a".into(), 14..15),
                     value: syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
                         sign: Sign::Positive,
                         digits: "4".into(),
-                    }))
+                        span: 16..17,
+                    })),
+                    span: 8..19,
                 }),
                 syntax::VarExpression::Expression(syntax::Expression::Symbol(syntax::Symbol(
-                    "a".into()
+                    "a".into(),
+                    19..20,
                 )),)
             ]
-            .into()
+            .into(),
+            span: 0..22,
         }))
     );
 }
@@ -151,6 +169,7 @@ fn parse_literal() {
         Ok(Some(syntax::Literal::Int(syntax::Int {
             sign: Sign::Positive,
             digits: "5".into(),
+            span: 0..1,
         })))
     );
 }
@@ -164,6 +183,7 @@ fn parse_int() {
         Ok(Some(syntax::Int {
             sign: Sign::Negative,
             digits: "5".into(),
+            span: 0..2,
         }))
     );
 }
@@ -174,7 +194,7 @@ fn parse_string_literal_simple() {
     assert_parse!(
         syntax::StringLiteral,
         document,
-        Ok(Some(syntax::StringLiteral("string litteräl".into())))
+        Ok(Some(syntax::StringLiteral("string litteräl".into(), 0..18)))
     );
 }
 
@@ -185,7 +205,8 @@ fn parse_string_literal_escapes() {
         syntax::StringLiteral,
         document,
         Ok(Some(syntax::StringLiteral(
-            "string\n\t\x07fragment\x00\"\\ \x08\x1b\x7f".into()
+            "string\n\t\x07fragment\x00\"\\ \x08\x1b\x7f".into(),
+            0..36,
         )))
     );
 }
@@ -196,7 +217,7 @@ fn parse_symbol_1() {
     assert_parse!(
         syntax::Symbol,
         document,
-        Ok(Some(syntax::Symbol("defun!?_".into())))
+        Ok(Some(syntax::Symbol("defun!?_".into(), 0..8)))
     );
 }
 
@@ -206,7 +227,7 @@ fn parse_symbol_2() {
     assert_parse!(
         syntax::Symbol,
         document,
-        Ok(Some(syntax::Symbol("_".into())))
+        Ok(Some(syntax::Symbol("_".into(), 0..1)))
     );
 }
 
@@ -217,6 +238,6 @@ fn parse_symbol_consumed() {
     assert_parse!(
         syntax::Symbol,
         document,
-        Ok(Some(syntax::Symbol("defun".into())))
+        Ok(Some(syntax::Symbol("defun".into(), 1..6)))
     );
 }
