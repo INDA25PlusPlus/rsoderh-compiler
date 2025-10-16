@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Range};
+use std::{fmt::Display, ops::Range, sync::Arc};
 
 use crate::{
     lex::{self, Document, Tokenizer},
@@ -67,7 +67,7 @@ impl Parser for syntax::File {
 
         loop {
             if let Some(arg) = syntax::Statement::parse_from(&mut parsed_document)? {
-                statements.push(arg);
+                statements.push(Arc::new(arg));
                 _ = lex::WhiteSpace::token(&mut parsed_document);
             } else {
                 break;
@@ -94,11 +94,11 @@ impl Parser for syntax::Statement {
         Self: Sized,
     {
         if let Some(node) = syntax::Defun::parse_from(document)? {
-            Ok(Some(syntax::Statement::Defun(node)))
+            Ok(Some(syntax::Statement::Defun(node.into())))
         } else if let Some(node) = syntax::Var::parse_from(document)? {
-            Ok(Some(syntax::Statement::Var(node)))
+            Ok(Some(syntax::Statement::Var(node.into())))
         } else if let Some(node) = syntax::Expression::parse_from(document)? {
-            Ok(Some(syntax::Statement::Expression(node)))
+            Ok(Some(syntax::Statement::Expression(node.into())))
         } else {
             Ok(None)
         }
@@ -152,7 +152,7 @@ impl Parser for syntax::Defun {
         let mut arguments = Vec::new();
         loop {
             if let Some(arg) = syntax::Symbol::parse_from(&mut parsed_document)? {
-                arguments.push(arg);
+                arguments.push(arg.into());
                 _ = lex::WhiteSpace::token(&mut parsed_document);
             } else {
                 break;
@@ -182,9 +182,9 @@ impl Parser for syntax::Defun {
         let end = parsed_document.pos();
         *document = parsed_document;
         Ok(Some(Self {
-            name,
+            name: name.into(),
             arguments: arguments.into(),
-            body,
+            body: body.into(),
             span: start..end,
         }))
     }
@@ -241,8 +241,8 @@ impl Parser for syntax::Var {
         let end = parsed_document.pos();
         *document = parsed_document;
         Ok(Some(Self {
-            name,
-            value,
+            name: name.into(),
+            value: value.into(),
             span: start..end,
         }))
     }
@@ -258,13 +258,13 @@ impl Parser for syntax::Expression {
         Self: Sized,
     {
         if let Some(node) = syntax::Progn::parse_from(document)? {
-            Ok(Some(syntax::Expression::Progn(node)))
+            Ok(Some(syntax::Expression::Progn(node.into())))
         } else if let Some(node) = syntax::Application::parse_from(document)? {
-            Ok(Some(syntax::Expression::Application(node)))
+            Ok(Some(syntax::Expression::Application(node.into())))
         } else if let Some(node) = syntax::Symbol::parse_from(document)? {
-            Ok(Some(syntax::Expression::Symbol(node)))
+            Ok(Some(syntax::Expression::Symbol(node.into())))
         } else if let Some(node) = syntax::Literal::parse_from(document)? {
-            Ok(Some(syntax::Expression::Literal(node)))
+            Ok(Some(syntax::Expression::Literal(node.into())))
         } else {
             Ok(None)
         }
@@ -304,7 +304,7 @@ impl Parser for syntax::Application {
 
         loop {
             if let Some(arg) = syntax::Expression::parse_from(&mut parsed_document)? {
-                args.push(arg);
+                args.push(Arc::new(arg));
                 _ = lex::WhiteSpace::token(&mut parsed_document);
             } else {
                 break;
@@ -322,7 +322,7 @@ impl Parser for syntax::Application {
         let end = parsed_document.pos();
         *document = parsed_document;
         Ok(Some(Self {
-            function,
+            function: function.into(),
             args: args.into(),
             span: start..end,
         }))
@@ -361,9 +361,9 @@ impl Parser for syntax::Progn {
             _ = lex::WhiteSpace::token(&mut parsed_document);
 
             if let Some(var) = syntax::Var::parse_from(&mut parsed_document)? {
-                expressions.push(syntax::VarExpression::Var(var));
+                expressions.push(syntax::VarExpression::Var(var.into()).into());
             } else if let Some(expression) = syntax::Expression::parse_from(&mut parsed_document)? {
-                expressions.push(syntax::VarExpression::Expression(expression));
+                expressions.push(syntax::VarExpression::Expression(expression.into()).into());
             } else {
                 break;
             }
@@ -394,9 +394,9 @@ impl Parser for syntax::Literal {
         Self: Sized,
     {
         if let Some(int) = syntax::Int::parse_from(document)? {
-            Ok(Some(syntax::Literal::Int(int)))
+            Ok(Some(syntax::Literal::Int(int.into())))
         } else if let Some(string) = syntax::StringLiteral::parse_from(document)? {
-            Ok(Some(syntax::Literal::String(string)))
+            Ok(Some(syntax::Literal::String(string.into())))
         } else {
             Ok(None)
         }

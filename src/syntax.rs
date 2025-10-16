@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
@@ -23,63 +23,63 @@ pub enum NodeType {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct File {
-    pub statements: Box<[Statement]>,
+    pub statements: Box<[Arc<Statement>]>,
     pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Statement {
-    Defun(Defun),
-    Var(Var),
-    Expression(Expression),
+    Defun(Arc<Defun>),
+    Var(Arc<Var>),
+    Expression(Arc<Expression>),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Defun {
-    pub name: Symbol,
-    pub arguments: Box<[Symbol]>,
-    pub body: Expression,
+    pub name: Arc<Symbol>,
+    pub arguments: Box<[Arc<Symbol>]>,
+    pub body: Arc<Expression>,
     pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Var {
-    pub name: Symbol,
-    pub value: Expression,
+    pub name: Arc<Symbol>,
+    pub value: Arc<Expression>,
     pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Expression {
-    Progn(Progn),
-    Application(Application),
-    Symbol(Symbol),
-    Literal(Literal),
+    Progn(Arc<Progn>),
+    Application(Arc<Application>),
+    Symbol(Arc<Symbol>),
+    Literal(Arc<Literal>),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Application {
-    pub function: Symbol,
-    pub args: Box<[Expression]>,
+    pub function: Arc<Symbol>,
+    pub args: Box<[Arc<Expression>]>,
     pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Progn {
-    pub expressions: Box<[VarExpression]>,
+    pub expressions: Box<[Arc<VarExpression>]>,
     pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VarExpression {
-    Var(Var),
-    Expression(Expression),
+    Var(Arc<Var>),
+    Expression(Arc<Expression>),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Literal {
-    Int(Int),
-    String(StringLiteral),
+    Int(Arc<Int>),
+    String(Arc<StringLiteral>),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]

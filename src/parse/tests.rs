@@ -17,20 +17,36 @@ fn parse_file() {
         document,
         Ok(Some(syntax::File {
             statements: vec![
-                syntax::Statement::Expression(syntax::Expression::Literal(syntax::Literal::Int(
-                    syntax::Int {
-                        sign: Sign::Positive,
-                        digits: "1".into(),
-                        span: 1..2,
-                    }
-                ))),
-                syntax::Statement::Expression(syntax::Expression::Literal(syntax::Literal::Int(
-                    syntax::Int {
-                        sign: Sign::Positive,
-                        digits: "1".into(),
-                        span: 4..5,
-                    }
-                )))
+                syntax::Statement::Expression(
+                    syntax::Expression::Literal(
+                        syntax::Literal::Int(
+                            syntax::Int {
+                                sign: Sign::Positive,
+                                digits: "1".into(),
+                                span: 1..2,
+                            }
+                            .into()
+                        )
+                        .into()
+                    )
+                    .into()
+                )
+                .into(),
+                syntax::Statement::Expression(
+                    syntax::Expression::Literal(
+                        syntax::Literal::Int(
+                            syntax::Int {
+                                sign: Sign::Positive,
+                                digits: "1".into(),
+                                span: 4..5,
+                            }
+                            .into()
+                        )
+                        .into()
+                    )
+                    .into()
+                )
+                .into(),
             ]
             .into(),
             span: 0..9,
@@ -45,9 +61,9 @@ fn parse_defun() {
         syntax::Defun,
         document,
         Ok(Some(syntax::Defun {
-            name: syntax::Symbol("my-fun".into(), 8..14),
+            name: syntax::Symbol("my-fun".into(), 8..14).into(),
             arguments: vec![].into(),
-            body: syntax::Expression::Symbol(syntax::Symbol("nil".into(), 16..19)),
+            body: syntax::Expression::Symbol(syntax::Symbol("nil".into(), 16..19).into()).into(),
             span: 0..20,
         }))
     );
@@ -60,12 +76,16 @@ fn parse_var() {
         syntax::Var,
         document,
         Ok(Some(syntax::Var {
-            name: syntax::Symbol("a".into(), 8..9),
-            value: syntax::Expression::Application(syntax::Application {
-                function: syntax::Symbol("fun".into(), 10..13),
-                args: vec![].into(),
-                span: 9..14,
-            }),
+            name: syntax::Symbol("a".into(), 8..9).into(),
+            value: syntax::Expression::Application(
+                syntax::Application {
+                    function: syntax::Symbol("fun".into(), 10..13).into(),
+                    args: vec![].into(),
+                    span: 9..14,
+                }
+                .into()
+            )
+            .into(),
             span: 0..18
         }))
     );
@@ -77,17 +97,33 @@ fn parse_expression() {
     assert_parse!(
         syntax::Expression,
         document,
-        Ok(Some(syntax::Expression::Progn(syntax::Progn {
-            expressions: vec![syntax::VarExpression::Expression(
-                syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
-                    sign: Sign::Positive,
-                    digits: "3".into(),
-                    span: 9..10,
-                })),
-            )]
-            .into(),
-            span: 0..13,
-        })))
+        Ok(Some(
+            syntax::Expression::Progn(
+                syntax::Progn {
+                    expressions: vec![
+                        syntax::VarExpression::Expression(
+                            syntax::Expression::Literal(
+                                syntax::Literal::Int(
+                                    syntax::Int {
+                                        sign: Sign::Positive,
+                                        digits: "3".into(),
+                                        span: 9..10,
+                                    }
+                                    .into()
+                                )
+                                .into()
+                            )
+                            .into(),
+                        )
+                        .into()
+                    ]
+                    .into(),
+                    span: 0..13,
+                }
+                .into()
+            )
+            .into()
+        ))
     );
 }
 
@@ -98,33 +134,68 @@ fn parse_application() {
         syntax::Application,
         document,
         Ok(Some(syntax::Application {
-            function: syntax::Symbol("fun".into(), 2..5),
+            function: syntax::Symbol("fun".into(), 2..5).into(),
             args: vec![
-                syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
-                    sign: Sign::Positive,
-                    digits: "1".into(),
-                    span: 6..7,
-                })),
-                syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
-                    sign: Sign::Positive,
-                    digits: "2".into(),
-                    span: 8..9,
-                })),
-                syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
-                    sign: Sign::Positive,
-                    digits: "3".into(),
-                    span: 10..11,
-                })),
-                syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
-                    sign: Sign::Positive,
-                    digits: "4".into(),
-                    span: 12..13,
-                })),
-                syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
-                    sign: Sign::Positive,
-                    digits: "5".into(),
-                    span: 14..15,
-                })),
+                syntax::Expression::Literal(
+                    syntax::Literal::Int(
+                        syntax::Int {
+                            sign: Sign::Positive,
+                            digits: "1".into(),
+                            span: 6..7,
+                        }
+                        .into()
+                    )
+                    .into()
+                )
+                .into(),
+                syntax::Expression::Literal(
+                    syntax::Literal::Int(
+                        syntax::Int {
+                            sign: Sign::Positive,
+                            digits: "2".into(),
+                            span: 8..9,
+                        }
+                        .into()
+                    )
+                    .into()
+                )
+                .into(),
+                syntax::Expression::Literal(
+                    syntax::Literal::Int(
+                        syntax::Int {
+                            sign: Sign::Positive,
+                            digits: "3".into(),
+                            span: 10..11,
+                        }
+                        .into()
+                    )
+                    .into()
+                )
+                .into(),
+                syntax::Expression::Literal(
+                    syntax::Literal::Int(
+                        syntax::Int {
+                            sign: Sign::Positive,
+                            digits: "4".into(),
+                            span: 12..13,
+                        }
+                        .into()
+                    )
+                    .into()
+                )
+                .into(),
+                syntax::Expression::Literal(
+                    syntax::Literal::Int(
+                        syntax::Int {
+                            sign: Sign::Positive,
+                            digits: "5".into(),
+                            span: 14..15,
+                        }
+                        .into()
+                    )
+                    .into()
+                )
+                .into(),
             ]
             .into(),
             span: 0..17,
@@ -140,19 +211,30 @@ fn parse_progn() {
         document,
         Ok(Some(syntax::Progn {
             expressions: vec![
-                syntax::VarExpression::Var(syntax::Var {
-                    name: syntax::Symbol("a".into(), 14..15),
-                    value: syntax::Expression::Literal(syntax::Literal::Int(syntax::Int {
-                        sign: Sign::Positive,
-                        digits: "4".into(),
-                        span: 16..17,
-                    })),
-                    span: 8..19,
-                }),
-                syntax::VarExpression::Expression(syntax::Expression::Symbol(syntax::Symbol(
-                    "a".into(),
-                    19..20,
-                )),)
+                syntax::VarExpression::Var(
+                    syntax::Var {
+                        name: syntax::Symbol("a".into(), 14..15).into(),
+                        value: syntax::Expression::Literal(
+                            syntax::Literal::Int(
+                                syntax::Int {
+                                    sign: Sign::Positive,
+                                    digits: "4".into(),
+                                    span: 16..17,
+                                }
+                                .into()
+                            )
+                            .into()
+                        )
+                        .into(),
+                        span: 8..19,
+                    }
+                    .into()
+                )
+                .into(),
+                syntax::VarExpression::Expression(
+                    syntax::Expression::Symbol(syntax::Symbol("a".into(), 19..20,).into()).into()
+                )
+                .into(),
             ]
             .into(),
             span: 0..22,
@@ -170,7 +252,7 @@ fn parse_literal() {
             sign: Sign::Positive,
             digits: "5".into(),
             span: 0..1,
-        })))
+        }.into())))
     );
 }
 
