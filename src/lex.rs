@@ -22,10 +22,7 @@ impl Display for LineColumn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.path {
             Some(path) => f.write_str(
-                &path
-                    .file_name()
-                    .expect("surely our path isn't a directory")
-                    .to_string_lossy(),
+                &path.to_string_lossy(),
             )?,
             None => f.write_str("<anonymous-file>")?,
         }
@@ -99,7 +96,7 @@ impl Document {
             .unwrap_or((0, 0));
 
         let line = last_newline_index + 2;
-        let column = before.len() - last_newline_offset + 1;
+        let column = before.len() - last_newline_offset;
 
         LineColumn {
             line,
