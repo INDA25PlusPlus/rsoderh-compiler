@@ -1,0 +1,24 @@
+
+function l $two() {
+@start
+    %l1 =l copy 2
+
+    ret %l1
+}
+
+function l $return_u2d_second(l %p0, l %p1, l %p2) {
+@start
+    %l1 =l copy %p1
+
+    ret %l1
+}
+
+export function l $main() {
+@start
+    %l1 =l copy 1
+    %l2 =l call $two()
+    %l3 =l copy 3
+    %l4 =l call $return_u2d_second(l %l1, l %l2, l %l3)
+
+    ret %l4
+}

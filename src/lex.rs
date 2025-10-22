@@ -72,6 +72,10 @@ impl Document {
         *self.pos.borrow()
     }
 
+    pub fn set_pos(&self, pos: usize) {
+        *self.pos.borrow_mut() = pos;
+    }
+
     pub fn rest(&self) -> &str {
         &self.document[self.pos()..]
     }

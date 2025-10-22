@@ -1,48 +1,13 @@
-use std::{fmt::Display, ops::Range, sync::Arc};
+use std::{ops::Range, sync::Arc};
 
 use crate::{
-    lex::{self, Document, Tokenizer},
+    error::ParseError,
+    lex::{self, Tokenizer},
     syntax::{self, NodeType},
 };
 
 #[cfg(test)]
 mod tests;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParseError {
-    document: Document,
-    /// The type of node which was being parsed.
-    node_type: NodeType,
-    expected: &'static str,
-}
-
-impl ParseError {
-    pub fn new(document: Document, node_type: NodeType, expected: &'static str) -> Self {
-        Self {
-            document,
-            node_type,
-            expected,
-        }
-    }
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let found = lex::AnyToken::token(&mut self.document.clone());
-
-        write!(f, "Expected {}, but", self.expected,)?;
-
-        match found {
-            lex::AnyToken::Valid(token) => write!(f, " encountered token {}", token)?,
-            lex::AnyToken::Invalid(invalid_token) => {
-                write!(f, " encountered invalid token {}", invalid_token)?
-            }
-            lex::AnyToken::Eof(_) => f.write_str(" reached end of file")?,
-        }
-
-        write!(f, " at {}", self.document.row_column(),)
-    }
-}
 
 pub trait Parser {
     fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>

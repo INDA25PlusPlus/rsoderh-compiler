@@ -2,7 +2,7 @@ use std::{ops::Range, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeType {
     File,
     Statement,
@@ -91,3 +91,9 @@ pub struct StringLiteral(pub String, pub(crate) Range<usize>);
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Symbol(pub String, pub(crate) Range<usize>);
+
+impl Symbol {
+    pub fn new_static(content: &str) -> Self {
+        Self(String::from(content), 0..0)
+    }
+}
