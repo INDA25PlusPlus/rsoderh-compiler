@@ -418,11 +418,34 @@ impl Parser for syntax::Int {
         let start = document.pos();
 
         match lex::IntLiteral::token(document) {
-            Some(int) => Ok(Some(Self {
-                sign: int.sign,
-                digits: int.int.as_ref().into(),
-                span: start..document.pos(),
-            })),
+            Some(int) => {
+                // Yes, it's really stupid that we separate the sign, only to reassemble a new
+                // string for parsing, but I don't care enough to change it.
+                let Ok(value) = format!(
+                    "{}{}",
+                    match int.sign {
+                        lex::Sign::Positive => "",
+                        lex::Sign::Negative => "-",
+                    },
+                    int.int
+                )
+                .parse::<i64>() else {
+                    // Note: We've already checked that int.sign is a valid int, so the only
+                    // possible error is if it's out of range.
+                    let document = document.clone();
+                    document.set_pos(start);
+                    return Err(ParseError::new(
+                        document,
+                        NodeType::Int,
+                        "integer to be within -9_223_372_036_854_775_808 to 9_223_372_036_854_775_807",
+                    ));
+                };
+
+                Ok(Some(Self {
+                    value,
+                    span: start..document.pos(),
+                }))
+            }
             None => Ok(None),
         }
     }

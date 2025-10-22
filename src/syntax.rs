@@ -2,8 +2,6 @@ use std::{ops::Range, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
-use crate::lex::Sign;
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum NodeType {
     File,
@@ -84,8 +82,7 @@ pub enum Literal {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Int {
-    pub sign: Sign,
-    pub digits: String,
+    pub value: i64,
     pub(crate) span: Range<usize>,
 }
 

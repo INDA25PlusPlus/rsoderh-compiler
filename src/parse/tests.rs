@@ -1,4 +1,4 @@
-use crate::lex::Sign;
+use crate::lex::Document;
 
 use super::*;
 
@@ -21,8 +21,7 @@ fn parse_file() {
                     syntax::Expression::Literal(
                         syntax::Literal::Int(
                             syntax::Int {
-                                sign: Sign::Positive,
-                                digits: "1".into(),
+                                value: 1,
                                 span: 1..2,
                             }
                             .into()
@@ -36,8 +35,7 @@ fn parse_file() {
                     syntax::Expression::Literal(
                         syntax::Literal::Int(
                             syntax::Int {
-                                sign: Sign::Positive,
-                                digits: "1".into(),
+                                value: 1,
                                 span: 4..5,
                             }
                             .into()
@@ -105,8 +103,7 @@ fn parse_expression() {
                             syntax::Expression::Literal(
                                 syntax::Literal::Int(
                                     syntax::Int {
-                                        sign: Sign::Positive,
-                                        digits: "3".into(),
+                                        value: 3,
                                         span: 9..10,
                                     }
                                     .into()
@@ -139,8 +136,7 @@ fn parse_application() {
                 syntax::Expression::Literal(
                     syntax::Literal::Int(
                         syntax::Int {
-                            sign: Sign::Positive,
-                            digits: "1".into(),
+                            value: 1,
                             span: 6..7,
                         }
                         .into()
@@ -151,8 +147,7 @@ fn parse_application() {
                 syntax::Expression::Literal(
                     syntax::Literal::Int(
                         syntax::Int {
-                            sign: Sign::Positive,
-                            digits: "2".into(),
+                            value: 2,
                             span: 8..9,
                         }
                         .into()
@@ -163,8 +158,7 @@ fn parse_application() {
                 syntax::Expression::Literal(
                     syntax::Literal::Int(
                         syntax::Int {
-                            sign: Sign::Positive,
-                            digits: "3".into(),
+                            value: 3,
                             span: 10..11,
                         }
                         .into()
@@ -175,8 +169,7 @@ fn parse_application() {
                 syntax::Expression::Literal(
                     syntax::Literal::Int(
                         syntax::Int {
-                            sign: Sign::Positive,
-                            digits: "4".into(),
+                            value: 4,
                             span: 12..13,
                         }
                         .into()
@@ -187,8 +180,7 @@ fn parse_application() {
                 syntax::Expression::Literal(
                     syntax::Literal::Int(
                         syntax::Int {
-                            sign: Sign::Positive,
-                            digits: "5".into(),
+                            value: 5,
                             span: 14..15,
                         }
                         .into()
@@ -217,8 +209,7 @@ fn parse_progn() {
                         value: syntax::Expression::Literal(
                             syntax::Literal::Int(
                                 syntax::Int {
-                                    sign: Sign::Positive,
-                                    digits: "4".into(),
+                                    value: 4,
                                     span: 16..17,
                                 }
                                 .into()
@@ -248,11 +239,13 @@ fn parse_literal() {
     assert_parse!(
         syntax::Literal,
         document,
-        Ok(Some(syntax::Literal::Int(syntax::Int {
-            sign: Sign::Positive,
-            digits: "5".into(),
-            span: 0..1,
-        }.into())))
+        Ok(Some(syntax::Literal::Int(
+            syntax::Int {
+                value: 5,
+                span: 0..1,
+            }
+            .into()
+        )))
     );
 }
 
@@ -263,8 +256,7 @@ fn parse_int() {
         syntax::Int,
         document,
         Ok(Some(syntax::Int {
-            sign: Sign::Negative,
-            digits: "5".into(),
+            value: -5,
             span: 0..2,
         }))
     );
