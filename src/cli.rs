@@ -1,18 +1,90 @@
-use std::{fs, io, path, process};
+use std::{
+    fs,
+    io::{self, Write},
+    path, process,
+};
 
 use anyhow::anyhow;
 use clap::Parser as ClapParser;
 
-use crate::{lex, parse::Parser, syntax};
+use crate::{
+    lang::{self, render::QbeRenderable},
+    lex,
+    parse::Parser,
+    syntax,
+};
+
+pub fn assemble(program: &lang::Program, result: process::Stdio) -> anyhow::Result<()> {
+    let mut child = process::Command::new("qbe")
+        .arg("-")
+        .arg("-o")
+        .arg("-")
+        .stdin(process::Stdio::piped())
+        .stdout(result)
+        .spawn()?;
+
+    {
+        let stdin = child.stdin.as_mut().expect("Failed to open stdin");
+        program.render_qbe(stdin)?;
+    }
+
+    let output = child.wait_with_output()?;
+
+    if !output.status.success() {
+        return Err(anyhow!("qbe exited with error {}", output.status));
+    }
+
+    Ok(())
+}
+
+pub fn compile(program: &lang::Program, result: process::Stdio) -> anyhow::Result<()> {
+    let mut qbe = process::Command::new("qbe")
+        .arg("-")
+        .arg("-o")
+        .arg("-")
+        .stdin(process::Stdio::piped())
+        .stdout(process::Stdio::piped())
+        .spawn()?;
+    let mut gcc = process::Command::new("gcc")
+        .arg("-x")
+        .arg("assembler")
+        .arg("-")
+        .arg("-o")
+        .arg("/dev/stdout")
+        .stdin(qbe.stdout.expect("qbe stdout is captured"))
+        .stdout(result)
+        .spawn()?;
+
+    {
+        let mut qbe_stdin = qbe.stdin.take().expect("failed to open stdin");
+        program.render_qbe(&mut qbe_stdin)?;
+    }
+
+    let status = gcc.wait()?;
+    if !status.success() {
+        return Err(anyhow!("gcc exited with error {}", status));
+    }
+
+    Ok(())
+}
 
 #[derive(ClapParser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
     /// File with the Ship code to process. Specify '-' to read from stdin.
     file: path::PathBuf,
-    #[arg(long)]
     /// Write the program's AST as a JSON object to this file. Specify '-' for stdout.
+    #[arg(long)]
     ast: Option<path::PathBuf>,
+    /// Write the program's QBE intermediate representation to this file. Specify '-' for stdout.
+    #[arg(long)]
+    qbe: Option<path::PathBuf>,
+    /// Assemble the program and write the result to this file. Specify '-' for stdout.
+    #[arg(long)]
+    assemble: Option<path::PathBuf>,
+    /// Compile the program and write the binary to this file. Specify '-' for stdout.
+    #[arg(long)]
+    compile: Option<path::PathBuf>,
 }
 
 pub fn cli() -> anyhow::Result<()> {
@@ -20,7 +92,9 @@ pub fn cli() -> anyhow::Result<()> {
 
     let mut document = lex::Document::load(args.file)?;
 
-    let program = syntax::File::parse_from(&mut document).map_err(|error| anyhow!("{}", error))?;
+    let ast = syntax::File::parse_from(&mut document)
+        .map_err(|error| anyhow!("{}", error))?
+        .unwrap();
 
     if document.rest() != "" {
         // TODO: Actually helpful error messages.
@@ -28,6 +102,8 @@ pub fn cli() -> anyhow::Result<()> {
         eprintln!("remaining: {}", document.rest());
         process::exit(1);
     }
+
+    let program = lang::Program::compile(&ast, document).map_err(|error| anyhow!("{}", error))?;
 
     let mut did_anything = false;
 
@@ -39,13 +115,61 @@ pub fn cli() -> anyhow::Result<()> {
             Box::new(
                 fs::OpenOptions::new()
                     .write(true)
+                    .truncate(true)
                     .create(true)
                     .open(ast_path)?,
             )
         };
 
-        serde_json::to_writer_pretty(&mut file, &program)?;
+        serde_json::to_writer_pretty(&mut file, &ast)?;
         file.write(b"\n")?;
+    }
+
+    if let Some(path) = args.qbe {
+        did_anything = true;
+
+        let mut file: Box<dyn io::Write> = if path.to_str() == Some("-") {
+            Box::new(io::stdout())
+        } else {
+            Box::new(
+                fs::OpenOptions::new()
+                    .write(true)
+                    .truncate(true)
+                    .create(true)
+                    .open(path)?,
+            )
+        };
+
+        program.render_qbe(&mut file)?;
+    }
+
+    if let Some(path) = args.assemble {
+        did_anything = true;
+
+        let file: process::Stdio = if path.to_str() == Some("-") {
+            io::stdout().into()
+        } else {
+            fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(path)?
+                .into()
+        };
+
+        assemble(&program, file)?;
+    }
+
+    if let Some(path) = args.compile {
+        did_anything = true;
+
+        let file: process::Stdio = if path.to_str() == Some("-") {
+            io::stdout().into()
+        } else {
+            fs::OpenOptions::new().write(true).truncate(true).create(true).open(path)?.into()
+        };
+
+        compile(&program, file)?;
     }
 
     if !did_anything {
