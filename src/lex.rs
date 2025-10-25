@@ -21,9 +21,7 @@ pub struct LineColumn {
 impl Display for LineColumn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.path {
-            Some(path) => f.write_str(
-                &path.to_string_lossy(),
-            )?,
+            Some(path) => f.write_str(&path.to_string_lossy())?,
             None => f.write_str("<anonymous-file>")?,
         }
         write!(f, ":{}:{}", self.line, self.column)
@@ -154,6 +152,32 @@ impl Document {
 
             None => None,
         }
+    }
+
+    /// Match pattern at start of `Self::rest()`, returning the match if found, consuming the
+    /// matched bytes. A match is only considered successfull if the following string doesn't match
+    /// the suffix.
+    pub fn strip_prefix_match_not_followed_by(
+        &self,
+        pattern: &Regex,
+        suffix: &Regex,
+    ) -> Option<regex::Match> {
+        pattern
+            .find(&self.document[self.pos()..])
+            .and_then(|mat| {
+                if mat.start() == 0
+                    && !suffix
+                        .find(&self.document[self.pos() + mat.len()..])
+                        .is_some_and(|mat| mat.start() == 0)
+                {
+                    Some(mat)
+                } else {
+                    None
+                }
+            })
+            .inspect(|mat| {
+                *self.pos.borrow_mut() += mat.len();
+            })
     }
 }
 
@@ -527,12 +551,18 @@ impl Tokenizer for StringFragment {
 
 impl Tokenizer for Symbol {
     fn token(document: &mut Document) -> Option<Self> {
-        static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new("^(?:-)?[a-zA-Z+\\-/=<>!?_][0-9a-zA-Z+\\-/=<>!?_]*").expect("regex is valid")
+        static PATTERN_A: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new("^(?:-)?[a-zA-Z+\\/*=<>!?_][0-9a-zA-Z+\\-/*=<>!?_]*")
+                .expect("regex is valid")
         });
+        static PATTERN_B: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new("^--[0-9a-zA-Z+\\-/*=<>!?_]*|^-").expect("regex is valid"));
+        static DIGIT_PATTERN: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new("^[0-9]").expect("regex is valid"));
 
         document
-            .strip_prefix_match(&PATTERN)
+            .strip_prefix_match(&PATTERN_A)
+            .or_else(|| document.strip_prefix_match_not_followed_by(&PATTERN_B, &DIGIT_PATTERN))
             .map(|mat| Self(document.document.subslice_from_ref(mat.as_str())))
     }
 }
