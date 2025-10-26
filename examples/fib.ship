@@ -1,0 +1,21 @@
+(defun read-int (prompt)
+  (progn
+    (printf "%s" prompt)
+    (var input-buf (malloc 100))
+    (fgets input-buf 100 stdin)
+    (var input (strtol input-buf 0 10))
+    (free input-buf)
+    input))
+
+(defun fib-rec (current-n target-n f-n+1 f-n)
+  (if (>= current-n target-n)
+    f-n
+    (fib-rec (+ current-n 1) target-n (+ f-n+1 f-n) f-n+1)))
+
+(defun fib (n)
+  (fib-rec 0 n 1 0))
+
+(var n (read-int "Fibonacci number: "))
+(printf "\n%ld\n" (fib n))
+
+0
