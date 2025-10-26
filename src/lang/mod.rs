@@ -262,6 +262,8 @@ pub enum BuiltinSpecial {
     Or,
     #[strum(to_string = "not")]
     Not,
+    #[strum(to_string = "if")]
+    If,
 }
 
 impl BuiltinSpecial {
@@ -399,6 +401,50 @@ impl BuiltinSpecial {
 
                 Ok((instructions, bindings))
             }
+            BuiltinSpecial::If => {
+                let mut instructions = instructions.clone();
+                let mut bindings = bindings.clone();
+
+                let [condition_expr, then_expr, else_expr] =
+                    extract_args_exact(args, <&'static str>::from(self), span, globals.document())?;
+
+                let then_label = globals.next_label("then");
+                let else_label = globals.next_label("else");
+                let done_label = globals.next_label("if_done");
+
+                (instructions, bindings) =
+                    condition_expr.into_instructions(&instructions, &bindings, globals)?;
+                let condition = instructions.current_register();
+
+                instructions = instructions.with_jump(JumpInstruction::JumpNotZero(
+                    condition,
+                    then_label.clone(),
+                    else_label.clone(),
+                ));
+
+                instructions = instructions.with_label(then_label.clone());
+                (instructions, bindings) =
+                    then_expr.into_instructions(&instructions, &bindings, globals)?;
+                let then = instructions.current_register();
+                instructions = instructions.with_jump(JumpInstruction::Jump(done_label.clone()));
+
+                instructions = instructions.with_label(else_label.clone());
+                (instructions, bindings) =
+                    else_expr.into_instructions(&instructions, &bindings, globals)?;
+                let else_ = instructions.current_register();
+                instructions = instructions.with_jump(JumpInstruction::Jump(done_label.clone()));
+
+                instructions = instructions.with_label(done_label.clone());
+                instructions = instructions.with_instruction(Instruction::Phi(
+                    [
+                        (then_label, Value::Register(then)),
+                        (else_label, Value::Register(else_)),
+                    ]
+                    .into(),
+                ));
+
+                Ok((instructions, bindings))
+            }
         }
     }
 }
@@ -412,7 +458,7 @@ pub enum Builtin {
 }
 
 impl Builtin {
-    const VARIANTS: [Self; 16] = [
+    const VARIANTS: [Self; 17] = [
         Self::Variadic(BuiltinVariadic::Add),
         Self::Variadic(BuiltinVariadic::Sub),
         Self::Variadic(BuiltinVariadic::Mul),
@@ -429,6 +475,7 @@ impl Builtin {
         Self::Special(BuiltinSpecial::And),
         Self::Special(BuiltinSpecial::Or),
         Self::Special(BuiltinSpecial::Not),
+        Self::Special(BuiltinSpecial::If),
     ];
 }
 

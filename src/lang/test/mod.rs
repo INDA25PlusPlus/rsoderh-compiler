@@ -196,3 +196,11 @@ fn program_output_not() {
         "1\n0\n0",
     );
 }
+
+#[test]
+fn program_output_if() {
+    assert_compiled_stdout_eq!(
+        "(printf \"%d\\n%d\\n%d\" (if 1 2 3) (if 0 2 3) (if -10 2 3) (if -10 2 (printf \"garage\")))",
+        "2\n3\n2",
+    );
+}
