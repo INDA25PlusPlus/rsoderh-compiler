@@ -13,6 +13,9 @@
         "litteräl",
         "progn",
         "serde",
+        "SIGABRT",
+        "SIGFPE",
+        "SIGSEGV",
         "ünicode"
     ]
 }

@@ -1,7 +1,8 @@
 use std::{
     fs,
     io::{self, Write},
-    path, process,
+    path,
+    process::{self, exit},
 };
 
 use anyhow::anyhow;
@@ -200,8 +201,45 @@ pub fn cli() -> anyhow::Result<()> {
 
         compile(&program, file)?;
 
-        let mut child = process::Command::new(path).spawn()?;
-        child.wait()?;
+        let status = process::Command::new(&path).status()?;
+
+        if let Some(code) = status.code() {
+            if code != 0 {
+                exit(code);
+            }
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+
+            const SIGABRT: i32 = 6;
+            const SIGSEGV: i32 = 11;
+            const SIGFPE: i32 = 8;
+            const SIGILL: i32 = 4;
+
+            if let Some(signal) = status.signal() {
+                eprintln!(
+                    "[1] {} {} {}{:?}",
+                    process::id(),
+                    match signal {
+                        SIGABRT => "IOT instruction",
+                        SIGSEGV => "Segmentation fault",
+                        SIGFPE => "Floating point exception",
+                        SIGILL => "Illegal instruction",
+                        _ => "Terminated by signal",
+                    },
+                    if status.core_dumped() {
+                        "(core dumped) "
+                    } else {
+                        ""
+                    },
+                    &path
+                );
+
+                exit(1);
+            }
+        }
     }
 
     if !did_anything {
