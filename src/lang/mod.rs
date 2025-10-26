@@ -1,22 +1,463 @@
 //! Contains the parts used during semantic analysis.
 
-use std::sync::Arc;
+use std::{ops::Range, str::FromStr, sync::Arc};
 
 use crate::{
     error::{Error, SemanticError},
-    lang::instruction::{GlobalState, Identifier},
+    lang::instruction::{GlobalState, Identifier, JumpInstruction, Value},
     lex,
     parse::Parser,
     syntax::{self, Expression},
 };
-use instruction::{
-    Instruction, InstructionStack, IntoInstructions, IntoInstructionsReturn, Register,
-};
+use instruction::{BlockStack, Instruction, IntoInstructions, IntoInstructionsReturn, Register};
+use itertools::{Itertools, Position};
 
 mod instruction;
 pub mod render;
 #[cfg(test)]
 mod test;
+
+pub fn extract_args_exact<const N: usize>(
+    args: &[Arc<Expression>],
+    function_desc: &str,
+    span: &Range<usize>,
+    document: lex::Document,
+) -> Result<[Arc<Expression>; N], SemanticError> {
+    args.try_into()
+        .map_err(|_| {
+            if args.len() < N {
+                SemanticError::new(
+                    format!(
+                        "function '{}' called with too few argument, expected {}",
+                        function_desc, N,
+                    ),
+                    span.clone(),
+                    document,
+                )
+            } else {
+                SemanticError::new(
+                    format!(
+                        "function '{}' called with too few argument, expected {}",
+                        function_desc, N,
+                    ),
+                    span.clone(),
+                    document,
+                )
+            }
+        })
+        .map(|args: &[Arc<Expression>; N]| args.to_owned())
+}
+
+/// Builtin functions that take an arbitrary number of arguments, which are evaluated by performing
+/// the operation with each argument and the previous result.
+#[derive(Debug, Clone, Copy, strum_macros::EnumString, strum_macros::IntoStaticStr)]
+pub enum BuiltinVariadic {
+    #[strum(to_string = "+")]
+    Add,
+    #[strum(to_string = "-")]
+    Sub,
+    #[strum(to_string = "*")]
+    Mul,
+    #[strum(to_string = "//")]
+    Div,
+    #[strum(to_string = "rem")]
+    Rem,
+}
+
+impl BuiltinVariadic {
+    pub fn identity(&self) -> Option<i64> {
+        match self {
+            Self::Add => Some(0),
+            Self::Sub => None,
+            Self::Mul => Some(1),
+            Self::Div => None,
+            Self::Rem => None,
+        }
+    }
+
+    pub fn into_instructions(
+        &self,
+        mut args: &[Arc<Expression>],
+        span: &Range<usize>,
+        instructions: &BlockStack,
+        bindings: &BindingStack,
+        globals: &mut GlobalState,
+    ) -> Result<IntoInstructionsReturn, SemanticError> {
+        let mut instructions = instructions.clone();
+        let mut bindings = bindings.clone();
+
+        (instructions, bindings, args) = match self.identity() {
+            Some(identity) => (
+                instructions.with_instruction(Instruction::LiteralInt(identity)),
+                bindings,
+                args,
+            ),
+            None => {
+                // Builtin isn't symmetric (e.g. `-`), which means that we need to
+                // start with the first argument.
+                let Some(first) = args.first() else {
+                    return Err(SemanticError::new(
+                        format!(
+                            "function '{}' called with no argument, expected at least one",
+                            <&'static str>::from(self),
+                        ),
+                        span.clone(),
+                        globals.document(),
+                    ));
+                };
+
+                let (instructions, bindings) =
+                    first.into_instructions(&instructions, &bindings, globals)?;
+                (instructions, bindings, &args[1..])
+            }
+        };
+        let mut acc = instructions.current_register();
+
+        for expression in args {
+            (instructions, bindings) =
+                expression.into_instructions(&instructions, &bindings, globals)?;
+
+            instructions = instructions.with_instruction(match self {
+                BuiltinVariadic::Add => Instruction::Add(acc, instructions.current_register()),
+                BuiltinVariadic::Sub => Instruction::Sub(acc, instructions.current_register()),
+                BuiltinVariadic::Mul => Instruction::Mul(acc, instructions.current_register()),
+                BuiltinVariadic::Div => Instruction::Div(acc, instructions.current_register()),
+                BuiltinVariadic::Rem => Instruction::Rem(acc, instructions.current_register()),
+            });
+            acc = instructions.current_register();
+        }
+
+        Ok((instructions, bindings))
+    }
+}
+
+#[derive(Debug, Clone, Copy, strum_macros::EnumString, strum_macros::IntoStaticStr)]
+pub enum BuiltinBinary {
+    #[strum(to_string = ">>")]
+    ShiftRight,
+    #[strum(to_string = "<<")]
+    ShiftLeft,
+}
+
+impl BuiltinBinary {
+    pub fn into_instructions(
+        &self,
+        args: &[Arc<Expression>],
+        span: &Range<usize>,
+        instructions: &BlockStack,
+        bindings: &BindingStack,
+        globals: &mut GlobalState,
+    ) -> Result<IntoInstructionsReturn, SemanticError> {
+        let mut instructions = instructions.clone();
+        let mut bindings = bindings.clone();
+
+        let [a, b] =
+            extract_args_exact(args, <&'static str>::from(self), span, globals.document())?;
+
+        (instructions, bindings) = a.into_instructions(&instructions, &bindings, globals)?;
+        let arg_a = instructions.current_register();
+
+        (instructions, bindings) = b.into_instructions(&instructions, &bindings, globals)?;
+        let arg_b = instructions.current_register();
+
+        instructions = instructions.with_instruction(match self {
+            BuiltinBinary::ShiftRight => Instruction::ShiftRight(arg_a, arg_b),
+            BuiltinBinary::ShiftLeft => Instruction::ShiftLeft(arg_a, arg_b),
+        });
+
+        Ok((instructions, bindings))
+    }
+}
+
+/// Builtin functions that take an arbitrary number of arguments, which are evaluated by combining
+/// the results of the operation performed on each pair of argument with logical and.
+#[derive(Debug, Clone, Copy, strum_macros::EnumString, strum_macros::IntoStaticStr)]
+pub enum BuiltinComparison {
+    #[strum(to_string = "=")]
+    Equal,
+    #[strum(to_string = "!=")]
+    NotEqual,
+    #[strum(to_string = ">")]
+    GreaterThan,
+    #[strum(to_string = "<")]
+    LessThan,
+    #[strum(to_string = ">=")]
+    GreaterThanEqual,
+    #[strum(to_string = "<=")]
+    LessThanEqual,
+}
+
+impl BuiltinComparison {
+    pub fn into_instructions(
+        &self,
+        args: &[Arc<Expression>],
+        instructions: &BlockStack,
+        bindings: &BindingStack,
+        globals: &mut GlobalState,
+    ) -> Result<IntoInstructionsReturn, SemanticError> {
+        let mut instructions = instructions.clone();
+        let mut bindings = bindings.clone();
+
+        let mut last_arg = None;
+
+        let final_label = globals.next_label("final");
+        let done_label = globals.next_label("done_comparison");
+
+        let mut phi_labels = Vec::new();
+
+        for (pos, expression) in args.iter().with_position() {
+            (instructions, bindings) =
+                expression.into_instructions(&instructions, &bindings, globals)?;
+            let arg = instructions.current_register();
+
+            let next_label = match pos {
+                Position::Last | Position::Only => final_label.clone(),
+                _ => globals.next_label("arg"),
+            };
+
+            if let Some(last_arg) = last_arg {
+                instructions = instructions.with_instruction(match self {
+                    BuiltinComparison::Equal => Instruction::Equal(last_arg, arg),
+                    BuiltinComparison::NotEqual => Instruction::NotEqual(last_arg, arg),
+                    BuiltinComparison::GreaterThan => Instruction::GreaterThan(last_arg, arg),
+                    BuiltinComparison::LessThan => Instruction::LessThan(last_arg, arg),
+                    BuiltinComparison::GreaterThanEqual => {
+                        Instruction::GreaterThanEqual(last_arg, arg)
+                    }
+                    BuiltinComparison::LessThanEqual => Instruction::LessThanEqual(last_arg, arg),
+                });
+                let result = instructions.current_register();
+
+                instructions = instructions.with_jump(JumpInstruction::JumpNotZero(
+                    result,
+                    next_label.clone(),
+                    done_label.clone(),
+                ));
+            }
+            if !matches!(pos, Position::Last | Position::Only) {
+                phi_labels.push((next_label.clone(), Value::Literal(0)));
+                instructions = instructions.with_label(next_label.clone());
+            }
+
+            last_arg = Some(arg);
+        }
+
+        instructions = instructions.with_label(final_label.clone());
+        phi_labels.push((final_label.clone(), Value::Literal(1)));
+        instructions = instructions.with_jump(JumpInstruction::Jump(done_label.clone()));
+
+        instructions = instructions.with_label(done_label.clone());
+        instructions = instructions.with_instruction(Instruction::Phi(phi_labels.into()));
+
+        Ok((instructions, bindings))
+    }
+}
+
+/// Builtin functions with special handling.
+#[derive(Debug, Clone, Copy, strum_macros::EnumString, strum_macros::IntoStaticStr)]
+pub enum BuiltinSpecial {
+    #[strum(to_string = "and")]
+    And,
+    #[strum(to_string = "or")]
+    Or,
+    #[strum(to_string = "not")]
+    Not,
+}
+
+impl BuiltinSpecial {
+    pub fn into_instructions(
+        &self,
+        args: &[Arc<Expression>],
+        span: &Range<usize>,
+        instructions: &BlockStack,
+        bindings: &BindingStack,
+        globals: &mut GlobalState,
+    ) -> Result<IntoInstructionsReturn, SemanticError> {
+        match self {
+            BuiltinSpecial::And => {
+                let mut instructions = instructions.clone();
+                let mut bindings = bindings.clone();
+
+                let final_label = globals.next_label("final");
+                let done_label = globals.next_label("and_done");
+
+                let mut phi_labels = Vec::new();
+
+                let mut last_label = None;
+                // Default to true if zero args are given.
+                let mut last_value = Value::Literal(1);
+
+                for (pos, arg) in args.iter().with_position() {
+                    let label = last_label.unwrap_or_else(|| globals.next_label("arg"));
+                    instructions = instructions.with_label(label.clone());
+
+                    (instructions, bindings) =
+                        arg.into_instructions(&instructions, &bindings, globals)?;
+                    let value = instructions.current_register();
+
+                    let next_label = match pos {
+                        Position::Last | Position::Only => final_label.clone(),
+                        _ => globals.next_label("arg"),
+                    };
+                    instructions = instructions.with_jump(JumpInstruction::JumpNotZero(
+                        value,
+                        next_label.clone(),
+                        done_label.clone(),
+                    ));
+
+                    phi_labels.push((label.clone(), Value::Literal(0)));
+
+                    last_value = Value::Register(value);
+                    last_label = Some(next_label);
+                }
+
+                instructions = instructions.with_label(final_label.clone());
+                instructions = instructions.with_jump(JumpInstruction::Jump(done_label.clone()));
+                phi_labels.push((final_label.clone(), last_value));
+
+                instructions = instructions.with_label(done_label.clone());
+                instructions = instructions.with_instruction(Instruction::Phi(phi_labels.into()));
+
+                Ok((instructions, bindings))
+            }
+            BuiltinSpecial::Or => {
+                let mut instructions = instructions.clone();
+                let mut bindings = bindings.clone();
+
+                let final_label = globals.next_label("final");
+                let done_label = globals.next_label("or_done");
+
+                let mut phi_labels = Vec::new();
+
+                let mut last_label = None;
+
+                for (pos, arg) in args.iter().with_position() {
+                    let label = last_label.unwrap_or_else(|| globals.next_label("arg"));
+                    instructions = instructions.with_label(label.clone());
+
+                    (instructions, bindings) =
+                        arg.into_instructions(&instructions, &bindings, globals)?;
+                    let value = instructions.current_register();
+
+                    let next_label = match pos {
+                        Position::Last | Position::Only => final_label.clone(),
+                        _ => globals.next_label("arg"),
+                    };
+                    instructions = instructions.with_jump(JumpInstruction::JumpNotZero(
+                        value,
+                        done_label.clone(),
+                        next_label.clone(),
+                    ));
+
+                    phi_labels.push((label.clone(), Value::Register(value)));
+
+                    last_label = Some(next_label);
+                }
+
+                instructions = instructions.with_label(final_label.clone());
+                instructions = instructions.with_jump(JumpInstruction::Jump(done_label.clone()));
+                phi_labels.push((final_label.clone(), Value::Literal(0)));
+
+                instructions = instructions.with_label(done_label.clone());
+                instructions = instructions.with_instruction(Instruction::Phi(phi_labels.into()));
+
+                Ok((instructions, bindings))
+            }
+            BuiltinSpecial::Not => {
+                let mut instructions = instructions.clone();
+                let mut bindings = bindings.clone();
+
+                let [expr] =
+                    extract_args_exact(args, <&'static str>::from(self), span, globals.document())?;
+                (instructions, bindings) =
+                    expr.into_instructions(&instructions, &bindings, globals)?;
+                let arg = instructions.current_register();
+                let then_label = globals.next_label("then");
+                let else_label = globals.next_label("else");
+                let not_label = globals.next_label("not");
+
+                instructions = instructions.with_jump(JumpInstruction::JumpNotZero(
+                    arg,
+                    then_label.clone(),
+                    else_label.clone(),
+                ));
+
+                instructions = instructions.with_label(then_label.clone());
+                instructions = instructions.with_jump(JumpInstruction::Jump(not_label.clone()));
+
+                instructions = instructions.with_label(else_label.clone());
+                instructions = instructions.with_jump(JumpInstruction::Jump(not_label.clone()));
+
+                instructions = instructions.with_label(not_label.clone());
+                instructions = instructions.with_instruction(Instruction::Phi(
+                    [
+                        (then_label, Value::Literal(0)),
+                        (else_label, Value::Literal(1)),
+                    ]
+                    .into(),
+                ));
+
+                Ok((instructions, bindings))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Builtin {
+    Variadic(BuiltinVariadic),
+    Binary(BuiltinBinary),
+    Comparison(BuiltinComparison),
+    Special(BuiltinSpecial),
+}
+
+impl Builtin {
+    const VARIANTS: [Self; 16] = [
+        Self::Variadic(BuiltinVariadic::Add),
+        Self::Variadic(BuiltinVariadic::Sub),
+        Self::Variadic(BuiltinVariadic::Mul),
+        Self::Variadic(BuiltinVariadic::Div),
+        Self::Variadic(BuiltinVariadic::Rem),
+        Self::Binary(BuiltinBinary::ShiftRight),
+        Self::Binary(BuiltinBinary::ShiftLeft),
+        Self::Comparison(BuiltinComparison::Equal),
+        Self::Comparison(BuiltinComparison::NotEqual),
+        Self::Comparison(BuiltinComparison::GreaterThan),
+        Self::Comparison(BuiltinComparison::LessThan),
+        Self::Comparison(BuiltinComparison::GreaterThanEqual),
+        Self::Comparison(BuiltinComparison::LessThanEqual),
+        Self::Special(BuiltinSpecial::And),
+        Self::Special(BuiltinSpecial::Or),
+        Self::Special(BuiltinSpecial::Not),
+    ];
+}
+
+impl FromStr for Builtin {
+    type Err = strum::ParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(builtin) = s.parse() {
+            Ok(Self::Variadic(builtin))
+        } else if let Ok(builtin) = s.parse() {
+            Ok(Self::Binary(builtin))
+        } else if let Ok(builtin) = s.parse() {
+            Ok(Self::Comparison(builtin))
+        } else {
+            let builtin = s.parse()?;
+            Ok(Self::Special(builtin))
+        }
+    }
+}
+
+impl From<&Builtin> for &'static str {
+    fn from(value: &Builtin) -> Self {
+        match value {
+            Builtin::Variadic(builtin) => Self::from(builtin),
+            Builtin::Binary(builtin) => Self::from(builtin),
+            Builtin::Comparison(builtin) => Self::from(builtin),
+            Builtin::Special(builtin) => Self::from(builtin),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct BindingStack {
@@ -61,6 +502,9 @@ impl BindingStack {
     ) -> Self {
         self.with_value(symbol, BoundValue::Function(function_identifier))
     }
+    pub fn with_builtin(&self, symbol: Arc<syntax::Symbol>, builtin: Builtin) -> Self {
+        self.with_value(symbol, BoundValue::Builtin(builtin))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -91,12 +535,14 @@ impl Iterator for BindingStackItems {
 pub enum BoundValue {
     Register(Register),
     Function(Identifier),
+    /// The binding represents a builtin function
+    Builtin(Builtin),
 }
 
 impl IntoInstructions for syntax::Defun {
     fn into_instructions(
         &self,
-        instructions: &InstructionStack,
+        instructions: &BlockStack,
         bindings: &BindingStack,
         globals: &mut GlobalState,
     ) -> Result<IntoInstructionsReturn, SemanticError> {
@@ -109,7 +555,7 @@ impl IntoInstructions for syntax::Defun {
 impl IntoInstructions for syntax::Expression {
     fn into_instructions(
         &self,
-        instructions: &InstructionStack,
+        instructions: &BlockStack,
         bindings: &BindingStack,
         globals: &mut GlobalState,
     ) -> Result<IntoInstructionsReturn, SemanticError> {
@@ -127,12 +573,10 @@ impl IntoInstructions for syntax::Expression {
 impl IntoInstructions for syntax::Progn {
     fn into_instructions(
         &self,
-        instructions: &InstructionStack,
+        instructions: &BlockStack,
         bindings: &BindingStack,
         globals: &mut GlobalState,
     ) -> Result<IntoInstructionsReturn, SemanticError> {
-        // self.expressions.
-
         let mut instructions = instructions.clone();
         let mut bindings = bindings.clone();
 
@@ -154,7 +598,7 @@ impl IntoInstructions for syntax::Progn {
 impl IntoInstructions for syntax::Var {
     fn into_instructions(
         &self,
-        instructions: &InstructionStack,
+        instructions: &BlockStack,
         bindings: &BindingStack,
         globals: &mut GlobalState,
     ) -> Result<IntoInstructionsReturn, SemanticError> {
@@ -173,11 +617,11 @@ impl IntoInstructions for syntax::Var {
 impl IntoInstructions for syntax::Application {
     fn into_instructions(
         &self,
-        instructions: &InstructionStack,
+        instructions: &BlockStack,
         bindings: &BindingStack,
         globals: &mut GlobalState,
     ) -> Result<IntoInstructionsReturn, SemanticError> {
-        let identifier = match bindings
+        match bindings
             .lookup(&self.function)
             .as_ref()
             .map(|arc| arc.as_ref())
@@ -196,32 +640,44 @@ impl IntoInstructions for syntax::Application {
                     globals.document(),
                 ));
             }
-            Some(BoundValue::Function(identifier)) => identifier.clone(),
-        };
+            Some(BoundValue::Function(identifier)) => {
+                let mut instructions = instructions.clone();
+                let mut bindings = bindings.clone();
 
-        let mut instructions = instructions.clone();
-        let mut bindings = bindings.clone();
+                let registers = self
+                    .args
+                    .iter()
+                    .map(|expression| {
+                        (instructions, bindings) =
+                            expression.into_instructions(&instructions, &bindings, globals)?;
 
-        let registers = self
-            .args
-            .iter()
-            .map(|expression| {
-                (instructions, bindings) =
-                    expression.into_instructions(&instructions, &bindings, globals)?;
+                        Ok(instructions.current_register())
+                    })
+                    .collect::<Result<Box<[Register]>, SemanticError>>()?;
+                let instruction = Instruction::FunctionCall(identifier.clone(), registers);
 
-                Ok(instructions.current_register())
-            })
-            .collect::<Result<Box<[Register]>, SemanticError>>()?;
-        let instruction = Instruction::FunctionCall(identifier, registers);
-
-        Ok((instructions.with_instruction(instruction), bindings))
+                Ok((instructions.with_instruction(instruction), bindings))
+            }
+            Some(BoundValue::Builtin(Builtin::Variadic(builtin))) => {
+                builtin.into_instructions(&self.args, &self.span, instructions, bindings, globals)
+            }
+            Some(BoundValue::Builtin(Builtin::Binary(builtin))) => {
+                builtin.into_instructions(&self.args, &self.span, instructions, bindings, globals)
+            }
+            Some(BoundValue::Builtin(Builtin::Comparison(builtin))) => {
+                builtin.into_instructions(&self.args, instructions, bindings, globals)
+            }
+            Some(BoundValue::Builtin(Builtin::Special(builtin))) => {
+                builtin.into_instructions(&self.args, &self.span, instructions, bindings, globals)
+            }
+        }
     }
 }
 
 impl IntoInstructions for syntax::Symbol {
     fn into_instructions(
         &self,
-        instructions: &InstructionStack,
+        instructions: &BlockStack,
         bindings: &BindingStack,
         globals: &mut GlobalState,
     ) -> Result<IntoInstructionsReturn, SemanticError> {
@@ -229,6 +685,16 @@ impl IntoInstructions for syntax::Symbol {
             Some(BoundValue::Register(register)) => Instruction::Register(*register),
             Some(BoundValue::Function(identifier)) => {
                 Instruction::GlobalAddress(identifier.clone())
+            }
+            Some(BoundValue::Builtin(function)) => {
+                return Err(SemanticError::new(
+                    format!(
+                        "cannot dereference builtin function '{}' as a value",
+                        <&'static str>::from(function),
+                    ),
+                    self.1.clone(),
+                    globals.document(),
+                ));
             }
             None => {
                 return Err(SemanticError::new(
@@ -246,12 +712,12 @@ impl IntoInstructions for syntax::Symbol {
 impl IntoInstructions for syntax::Literal {
     fn into_instructions(
         &self,
-        instructions: &InstructionStack,
+        instructions: &BlockStack,
         bindings: &BindingStack,
         globals: &mut GlobalState,
     ) -> Result<IntoInstructionsReturn, SemanticError> {
         let instruction = match self {
-            syntax::Literal::Int(int) => Instruction::LiteralInt(int.clone()),
+            syntax::Literal::Int(int) => Instruction::LiteralInt(int.value),
             syntax::Literal::String(string_literal) => {
                 let identifier = globals.add_string(string_literal.clone());
                 Instruction::GlobalAddress(identifier)
@@ -266,7 +732,7 @@ impl IntoInstructions for syntax::Literal {
 pub struct Function {
     identifier: Identifier,
     num_args: usize,
-    instructions: InstructionStack,
+    instructions: BlockStack,
 }
 
 impl Function {
@@ -294,7 +760,7 @@ impl Function {
         }
 
         let (instructions, _) = function
-            .into_instructions(&InstructionStack::new(), &bindings, state)
+            .into_instructions(&BlockStack::new(), &bindings, state)
             .map_err(|error| Error::function_error(error, function.clone()))?;
 
         Ok(Self {
@@ -324,6 +790,13 @@ impl Program {
         for symbol in external_functions {
             let identifier = Identifier::from_symbol(&symbol);
             bindings = bindings.with_function(Arc::from(symbol), identifier);
+        }
+
+        for builtin in Builtin::VARIANTS {
+            bindings = bindings.with_builtin(
+                Arc::new(syntax::Symbol::new_static((&builtin).into())),
+                builtin,
+            );
         }
 
         let compiled_functions = file

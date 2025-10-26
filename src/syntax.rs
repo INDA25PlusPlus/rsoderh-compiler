@@ -86,6 +86,12 @@ pub struct Int {
     pub(crate) span: Range<usize>,
 }
 
+impl Int {
+    pub fn new_static(value: i64) -> Self {
+        Self { value, span: 0..0 }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StringLiteral(pub String, pub(crate) Range<usize>);
 

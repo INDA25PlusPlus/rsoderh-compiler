@@ -8,7 +8,7 @@ use itertools::{Itertools, Position};
 use crate::{
     lang::{
         Function, Program,
-        instruction::{Instruction, Register},
+        instruction::{Instruction, JumpInstruction, ProgramLine, Register},
     },
     syntax,
 };
@@ -95,10 +95,22 @@ impl QbeRenderable for Function {
         }
         write!(writer, ") {{\n@start\n")?;
 
-        for (register, instruction) in self.instructions.instructions() {
-            write!(writer, "    {} =l ", register)?;
-            instruction.render_qbe(writer)?;
-            write!(writer, "\n")?;
+        for line in self.instructions.lines() {
+            match line {
+                ProgramLine::Instruction(register, instruction) => {
+                    write!(writer, "    {} =l ", register)?;
+                    instruction.render_qbe(writer)?;
+                    write!(writer, "\n")?;
+                }
+                ProgramLine::Label(label) => {
+                    write!(writer, "{}\n", label)?;
+                }
+                ProgramLine::Jump(jump) => {
+                    write!(writer, "    ")?;
+                    jump.render_qbe(writer)?;
+                    write!(writer, "\n")?;
+                }
+            }
         }
         write!(writer, "\n")?;
         write!(writer, "    ret {}\n", self.instructions.current_register())?;
@@ -138,19 +150,76 @@ impl QbeRenderable for Instruction {
                 Ok(())
             }
             Instruction::Register(register) => {
-                write!(writer, "copy {}", register)?;
-
-                Ok(())
+                write!(writer, "copy {}", register)
             }
             Instruction::LiteralInt(int) => {
-                write!(writer, "copy {}", int.value)?;
+                write!(writer, "copy {}", int)
+            }
+            Instruction::GlobalAddress(identifier) => {
+                write!(writer, "copy {}", identifier)
+            }
+            Instruction::Phi(label_registers) => {
+                write!(writer, "phi")?;
+                for (pos, (label, register)) in label_registers.iter().with_position() {
+                    write!(writer, " {} {}", label, register)?;
+                    if !matches!(pos, Position::Last | Position::Only) {
+                        write!(writer, ",")?;
+                    }
+                }
 
                 Ok(())
             }
-            Instruction::GlobalAddress(identifier) => {
-                write!(writer, "copy {}", identifier)?;
+            Instruction::Add(a, b) => {
+                write!(writer, "add {}, {}", a, b)
+            }
+            Instruction::Sub(a, b) => {
+                write!(writer, "sub {}, {}", a, b)
+            }
+            Instruction::Mul(a, b) => {
+                write!(writer, "mul {}, {}", a, b)
+            }
+            Instruction::Div(a, b) => {
+                write!(writer, "div {}, {}", a, b)
+            }
+            Instruction::Rem(a, b) => {
+                write!(writer, "rem {}, {}", a, b)
+            }
+            Instruction::ShiftRight(a, b) => {
+                write!(writer, "shr {}, {}", a, b)
+            }
+            Instruction::ShiftLeft(a, b) => {
+                write!(writer, "shl {}, {}", a, b)
+            }
+            Instruction::Equal(a, b) => {
+                write!(writer, "ceql {}, {}", a, b)
+            }
+            Instruction::NotEqual(a, b) => {
+                write!(writer, "cnel {}, {}", a, b)
+            }
+            Instruction::GreaterThan(a, b) => {
+                write!(writer, "csgtl {}, {}", a, b)
+            }
+            Instruction::LessThan(a, b) => {
+                write!(writer, "csltl {}, {}", a, b)
+            }
+            Instruction::GreaterThanEqual(a, b) => {
+                write!(writer, "csgel {}, {}", a, b)
+            }
+            Instruction::LessThanEqual(a, b) => {
+                write!(writer, "cslel {}, {}", a, b)
+            }
+        }
+    }
+}
 
-                Ok(())
+impl QbeRenderable for JumpInstruction {
+    fn render_qbe(&self, writer: &mut impl io::Write) -> io::Result<()> {
+        match self {
+            Self::Jump(label) => {
+                write!(writer, "jmp {}", label)
+            }
+            Self::JumpNotZero(register, a, b) => {
+                write!(writer, "jnz {}, {}, {}", register, a, b)
             }
         }
     }
