@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::Parser as ClapParser;
+use tempfile::TempDir;
 
 use crate::{
     lang::{self, render::QbeRenderable},
@@ -85,12 +86,15 @@ struct Args {
     /// Compile the program and write the binary to this file. Specify '-' for stdout.
     #[arg(long)]
     compile: Option<path::PathBuf>,
+    /// Compile the program and run the result.
+    #[arg(long)]
+    run: bool,
 }
 
 pub fn cli() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let mut document = lex::Document::load(args.file)?;
+    let mut document = lex::Document::load(args.file.clone())?;
 
     let ast = syntax::File::parse_from(&mut document)
         .map_err(|error| anyhow!("{}", error))?
@@ -166,10 +170,38 @@ pub fn cli() -> anyhow::Result<()> {
         let file: process::Stdio = if path.to_str() == Some("-") {
             io::stdout().into()
         } else {
-            fs::OpenOptions::new().write(true).truncate(true).create(true).open(path)?.into()
+            fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(path)?
+                .into()
         };
 
         compile(&program, file)?;
+    }
+
+    if args.run {
+        did_anything = true;
+
+        let dir = TempDir::new()?;
+        let path = dir.path().join(
+            args.file
+                .file_stem()
+                .expect("the filepath has been opened successfully already"),
+        );
+
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&path)?
+            .into();
+
+        compile(&program, file)?;
+
+        let mut child = process::Command::new(path).spawn()?;
+        child.wait()?;
     }
 
     if !did_anything {
