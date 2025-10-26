@@ -794,19 +794,14 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn compile(
-        function: Arc<syntax::Defun>,
-        bindings: &BindingStack,
-        state: &mut GlobalState,
-    ) -> Result<Self, Error> {
-        let identifier = match function.name.0.as_ref() {
+    /// Get the identifier for a defun value.
+    pub fn defun_identifier(function: Arc<syntax::Defun>) -> Identifier {
+        match function.name.0.as_ref() {
             "main" => Identifier::new("_main"),
             _ => Identifier::from_symbol(&function.name),
-        };
-        Self::compile_with_identifier(identifier, function, bindings, state)
+        }
     }
-
-    pub fn compile_with_identifier(
+    pub fn compile(
         identifier: Identifier,
         function: Arc<syntax::Defun>,
         bindings: &BindingStack,
@@ -853,7 +848,7 @@ impl Program {
         let external_variables = [
             syntax::Symbol::new_static("stdin"),
             syntax::Symbol::new_static("stdout"),
-            syntax::Symbol::new_static("stderr"),            
+            syntax::Symbol::new_static("stderr"),
         ];
 
         for symbol in external_functions {
@@ -872,22 +867,18 @@ impl Program {
             );
         }
 
-        let compiled_functions = file
+        let defun_identifiers = file
             .statements
             .iter()
             .filter_map(|statement| match statement.as_ref() {
                 syntax::Statement::Defun(defun) => Some(defun.clone()),
                 _ => None,
             })
-            .map(|defun| {
-                Ok((
-                    Function::compile(defun.clone(), &bindings, &mut state)?,
-                    defun,
-                ))
-            })
+            .map(|defun| Ok((defun.clone(), Function::defun_identifier(defun))))
             .collect::<Result<Box<[_]>, _>>()?;
 
-        for (function, defun) in &compiled_functions {
+        // Add all function identifiers to the global scope.
+        for (defun, identifier) in &defun_identifiers {
             if matches!(
                 bindings
                     .lookup(&defun.name)
@@ -902,8 +893,15 @@ impl Program {
                 )));
             }
 
-            bindings = bindings.with_function(defun.name.clone(), function.identifier.clone())
+            bindings = bindings.with_function(defun.name.clone(), identifier.clone())
         }
+
+        let functions = defun_identifiers
+            .into_iter()
+            .map(|(defun, identifier)| {
+                Function::compile(identifier, defun.clone(), &bindings, &mut state)
+            })
+            .collect::<Result<Box<[_]>, _>>()?;
 
         let top_level_body = syntax::Progn {
             expressions: file
@@ -928,17 +926,12 @@ impl Program {
             body: Arc::new(syntax::Expression::Progn(Arc::new(top_level_body))),
             span: file.span.clone(),
         };
-        let top_level = Function::compile_with_identifier(
+        let top_level = Function::compile(
             Identifier::new("main"),
             Arc::new(top_level_defun),
             &bindings,
             &mut state,
         )?;
-
-        let functions = compiled_functions
-            .into_iter()
-            .map(|(function, _)| function)
-            .collect();
 
         Ok(Self {
             functions,
