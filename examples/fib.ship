@@ -1,9 +1,9 @@
 (defun read-int (prompt)
   (progn
     (printf "%s" prompt)
-    (var input-buf (malloc 100))
+    (let input-buf (malloc 100))
     (fgets input-buf 100 stdin)
-    (var input (strtol input-buf 0 10))
+    (let input (strtol input-buf 0 10))
     (free input-buf)
     input))
 
@@ -15,7 +15,7 @@
 (defun fib (n)
   (fib-rec 0 n 1 0))
 
-(var n (read-int "Fibonacci number: "))
+(let n (read-int "Fibonacci number: "))
 (printf "\n%ld\n" (fib n))
 
 0

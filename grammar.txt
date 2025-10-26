@@ -1,12 +1,12 @@
 <file> ::= <opt_ws> (<statement> <opt_ws>)*
 
 <statement> ::= <defun>
-              | <var>
+              | <let>
               | <expression>
 
 <defun> ::= "(" <opt_ws> "defun" <ws> <symbol> <opt_ws> "(" <opt_ws> (<symbol> (<ws> <symbol>)*)? ")" <opt_ws> <expression> <opt_ws> ")"
 
-<var> ::= "(" <opt_ws> "var" <opt_ws> <expression> <opt_ws> ")"
+<let> ::= "(" <opt_ws> "let" <opt_ws> <expression> <opt_ws> ")"
 
 <expression> ::= <application>
                | <progn>
@@ -15,7 +15,7 @@
 
 <application> ::= "(" <opt_ws> <symbol> <opt_ws> (<expression> <opt_ws>)* ")"
 
-<progn> ::= "(" <opt_ws> "progn" <opt_ws> ((<expression> | <var>) <opt_ws>)* ")"
+<progn> ::= "(" <opt_ws> "progn" <opt_ws> ((<expression> | <let>) <opt_ws>)* ")"
 
 <literal> ::= <int>
             | <string>

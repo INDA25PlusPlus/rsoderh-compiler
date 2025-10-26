@@ -7,11 +7,11 @@ pub enum NodeType {
     File,
     Statement,
     Defun,
-    Var,
+    Let,
     Expression,
     Application,
     Progn,
-    VarExpression,
+    LetExpression,
     Literal,
     Int,
     Float,
@@ -28,7 +28,7 @@ pub struct File {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Statement {
     Defun(Arc<Defun>),
-    Var(Arc<Var>),
+    Let(Arc<Let>),
     Expression(Arc<Expression>),
 }
 
@@ -41,7 +41,7 @@ pub struct Defun {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Var {
+pub struct Let {
     pub name: Arc<Symbol>,
     pub value: Arc<Expression>,
     pub(crate) span: Range<usize>,
@@ -64,13 +64,13 @@ pub struct Application {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Progn {
-    pub expressions: Box<[Arc<VarExpression>]>,
+    pub expressions: Box<[Arc<LetExpression>]>,
     pub(crate) span: Range<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum VarExpression {
-    Var(Arc<Var>),
+pub enum LetExpression {
+    Let(Arc<Let>),
     Expression(Arc<Expression>),
 }
 

@@ -68,12 +68,12 @@ fn parse_defun() {
 }
 
 #[test]
-fn parse_var() {
-    let mut document = Document::from_str("( \tvar  a(fun)   )");
+fn parse_let() {
+    let mut document = Document::from_str("( \tlet  a(fun)   )");
     assert_parse!(
-        syntax::Var,
+        syntax::Let,
         document,
-        Ok(Some(syntax::Var {
+        Ok(Some(syntax::Let {
             name: syntax::Symbol("a".into(), 8..9).into(),
             value: syntax::Expression::Application(
                 syntax::Application {
@@ -99,7 +99,7 @@ fn parse_expression() {
             syntax::Expression::Progn(
                 syntax::Progn {
                     expressions: vec![
-                        syntax::VarExpression::Expression(
+                        syntax::LetExpression::Expression(
                             syntax::Expression::Literal(
                                 syntax::Literal::Int(
                                     syntax::Int {
@@ -197,14 +197,14 @@ fn parse_application() {
 
 #[test]
 fn parse_progn() {
-    let mut document = Document::from_str("(  progn( var a 4 )a )");
+    let mut document = Document::from_str("(  progn( let a 4 )a )");
     assert_parse!(
         syntax::Progn,
         document,
         Ok(Some(syntax::Progn {
             expressions: vec![
-                syntax::VarExpression::Var(
-                    syntax::Var {
+                syntax::LetExpression::Let(
+                    syntax::Let {
                         name: syntax::Symbol("a".into(), 14..15).into(),
                         value: syntax::Expression::Literal(
                             syntax::Literal::Int(
@@ -222,7 +222,7 @@ fn parse_progn() {
                     .into()
                 )
                 .into(),
-                syntax::VarExpression::Expression(
+                syntax::LetExpression::Expression(
                     syntax::Expression::Symbol(syntax::Symbol("a".into(), 19..20,).into()).into()
                 )
                 .into(),

@@ -60,8 +60,8 @@ impl Parser for syntax::Statement {
     {
         if let Some(node) = syntax::Defun::parse_from(document)? {
             Ok(Some(syntax::Statement::Defun(node.into())))
-        } else if let Some(node) = syntax::Var::parse_from(document)? {
-            Ok(Some(syntax::Statement::Var(node.into())))
+        } else if let Some(node) = syntax::Let::parse_from(document)? {
+            Ok(Some(syntax::Statement::Let(node.into())))
         } else if let Some(node) = syntax::Expression::parse_from(document)? {
             Ok(Some(syntax::Statement::Expression(node.into())))
         } else {
@@ -72,7 +72,7 @@ impl Parser for syntax::Statement {
     fn span(&self) -> &Range<usize> {
         match self {
             syntax::Statement::Defun(node) => node.span(),
-            syntax::Statement::Var(node) => node.span(),
+            syntax::Statement::Let(node) => node.span(),
             syntax::Statement::Expression(node) => node.span(),
         }
     }
@@ -159,7 +159,7 @@ impl Parser for syntax::Defun {
     }
 }
 
-impl Parser for syntax::Var {
+impl Parser for syntax::Let {
     fn parse_from(document: &mut lex::Document) -> Result<Option<Self>, ParseError>
     where
         Self: Sized,
@@ -177,14 +177,14 @@ impl Parser for syntax::Var {
             return Ok(None);
         };
 
-        if &symbol.0 != "var" {
+        if &symbol.0 != "let" {
             return Ok(None);
         }
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
         let Some(name) = syntax::Symbol::parse_from(&mut parsed_document)? else {
-            return Err(ParseError::new(parsed_document, NodeType::Var, "symbol"));
+            return Err(ParseError::new(parsed_document, NodeType::Let, "symbol"));
         };
 
         _ = lex::WhiteSpace::token(&mut parsed_document);
@@ -192,7 +192,7 @@ impl Parser for syntax::Var {
         let Some(value) = syntax::Expression::parse_from(&mut parsed_document)? else {
             return Err(ParseError::new(
                 parsed_document,
-                NodeType::Var,
+                NodeType::Let,
                 "expression",
             ));
         };
@@ -200,7 +200,7 @@ impl Parser for syntax::Var {
         _ = lex::WhiteSpace::token(&mut parsed_document);
 
         let Some(_) = lex::CloseParen::token(&mut parsed_document) else {
-            return Err(ParseError::new(parsed_document, NodeType::Var, "')'"));
+            return Err(ParseError::new(parsed_document, NodeType::Let, "')'"));
         };
 
         let end = parsed_document.pos();
@@ -325,10 +325,10 @@ impl Parser for syntax::Progn {
         loop {
             _ = lex::WhiteSpace::token(&mut parsed_document);
 
-            if let Some(var) = syntax::Var::parse_from(&mut parsed_document)? {
-                expressions.push(syntax::VarExpression::Var(var.into()).into());
+            if let Some(let_) = syntax::Let::parse_from(&mut parsed_document)? {
+                expressions.push(syntax::LetExpression::Let(let_.into()).into());
             } else if let Some(expression) = syntax::Expression::parse_from(&mut parsed_document)? {
-                expressions.push(syntax::VarExpression::Expression(expression.into()).into());
+                expressions.push(syntax::LetExpression::Expression(expression.into()).into());
             } else {
                 break;
             }

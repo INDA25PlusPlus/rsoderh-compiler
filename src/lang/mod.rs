@@ -653,10 +653,10 @@ impl IntoInstructions for syntax::Progn {
 
         for expression in &self.expressions {
             (instructions, bindings) = match expression.as_ref() {
-                syntax::VarExpression::Var(node) => {
+                syntax::LetExpression::Let(node) => {
                     node.into_instructions(&instructions, &bindings, globals)
                 }
-                syntax::VarExpression::Expression(node) => {
+                syntax::LetExpression::Expression(node) => {
                     node.into_instructions(&instructions, &bindings, globals)
                 }
             }?;
@@ -666,7 +666,7 @@ impl IntoInstructions for syntax::Progn {
     }
 }
 
-impl IntoInstructions for syntax::Var {
+impl IntoInstructions for syntax::Let {
     fn into_instructions(
         &self,
         instructions: &BlockStack,
@@ -925,11 +925,11 @@ impl Program {
                 .iter()
                 .filter_map(|statement| match statement.as_ref() {
                     syntax::Statement::Defun(_) => None,
-                    syntax::Statement::Var(var) => {
-                        Some(Arc::new(syntax::VarExpression::Var(var.clone())))
+                    syntax::Statement::Let(let_) => {
+                        Some(Arc::new(syntax::LetExpression::Let(let_.clone())))
                     }
                     syntax::Statement::Expression(expression) => Some(Arc::new(
-                        syntax::VarExpression::Expression(expression.clone()),
+                        syntax::LetExpression::Expression(expression.clone()),
                     )),
                 })
                 .collect(),

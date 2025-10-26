@@ -1,8 +1,8 @@
-(var string-to-print "a long ünicode string with escapes!\nBell sound: 🔔\a")
+(let string-to-print "a long ünicode string with escapes!\nBell sound: 🔔\a")
 
 (defun add-numbers (a b c)
     (progn
-        (var num 42)
+        (let num 42)
         (+ a b c num)))
 
 (printf "%s\n" string-to-print)
