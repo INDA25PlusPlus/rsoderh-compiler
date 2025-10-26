@@ -10,12 +10,15 @@
         "cslel",
         "csltl",
         "ENBF",
+        "fgets",
         "litteräl",
+        "loadl",
         "progn",
         "serde",
         "SIGABRT",
         "SIGFPE",
         "SIGSEGV",
+        "strtol",
         "ünicode"
     ]
 }

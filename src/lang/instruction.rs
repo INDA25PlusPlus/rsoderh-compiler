@@ -126,6 +126,8 @@ pub enum Instruction {
     LiteralInt(i64),
     /// Assigns the address of the given global identifier to the result.
     GlobalAddress(Identifier),
+    /// Assigns the value of the given global variable to the result.
+    Global(Identifier),
     /// QBE's phi instruction: Assigns a value to the result based on from which label this
     /// instruction was jumped to.
     Phi(Box<[(Label, Value)]>),

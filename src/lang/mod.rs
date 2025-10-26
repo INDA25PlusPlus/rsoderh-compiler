@@ -549,6 +549,13 @@ impl BindingStack {
     ) -> Self {
         self.with_value(symbol, BoundValue::Function(function_identifier))
     }
+    pub fn with_external_variable(
+        &self,
+        symbol: Arc<syntax::Symbol>,
+        function_identifier: Identifier,
+    ) -> Self {
+        self.with_value(symbol, BoundValue::ExternalVariable(function_identifier))
+    }
     pub fn with_builtin(&self, symbol: Arc<syntax::Symbol>, builtin: Builtin) -> Self {
         self.with_value(symbol, BoundValue::Builtin(builtin))
     }
@@ -582,6 +589,7 @@ impl Iterator for BindingStackItems {
 pub enum BoundValue {
     Register(Register),
     Function(Identifier),
+    ExternalVariable(Identifier),
     /// The binding represents a builtin function
     Builtin(Builtin),
 }
@@ -680,7 +688,7 @@ impl IntoInstructions for syntax::Application {
                     globals.document(),
                 ));
             }
-            Some(BoundValue::Register(_)) => {
+            Some(BoundValue::Register(_) | BoundValue::ExternalVariable(_)) => {
                 return Err(SemanticError::new(
                     format!("'{}' is not a function", &self.function.0),
                     self.span.clone(),
@@ -732,6 +740,9 @@ impl IntoInstructions for syntax::Symbol {
             Some(BoundValue::Register(register)) => Instruction::Register(*register),
             Some(BoundValue::Function(identifier)) => {
                 Instruction::GlobalAddress(identifier.clone())
+            }
+            Some(BoundValue::ExternalVariable(identifier)) => {
+                Instruction::Global(identifier.clone())
             }
             Some(BoundValue::Builtin(function)) => {
                 return Err(SemanticError::new(
@@ -830,13 +841,28 @@ impl Program {
         let mut state = GlobalState::new(document.clone());
         let mut bindings = BindingStack::new();
 
-        // Hard-coded list of external functions which can be called in Ship. Would be nice to scan
-        // this from header files, but that seems like a lot of work.
-        let external_functions = [syntax::Symbol::new_static("printf")];
+        // Hard-coded list of external functions and variables which can be called in Ship. Would be
+        // nice to scan this from header files, but that seems like a lot of work.
+        let external_functions = [
+            syntax::Symbol::new_static("printf"),
+            syntax::Symbol::new_static("strtol"),
+            syntax::Symbol::new_static("fgets"),
+            syntax::Symbol::new_static("malloc"),
+            syntax::Symbol::new_static("free"),
+        ];
+        let external_variables = [
+            syntax::Symbol::new_static("stdin"),
+            syntax::Symbol::new_static("stdout"),
+            syntax::Symbol::new_static("stderr"),            
+        ];
 
         for symbol in external_functions {
             let identifier = Identifier::from_symbol(&symbol);
             bindings = bindings.with_function(Arc::from(symbol), identifier);
+        }
+        for symbol in external_variables {
+            let identifier = Identifier::from_symbol(&symbol);
+            bindings = bindings.with_external_variable(Arc::from(symbol), identifier);
         }
 
         for builtin in Builtin::VARIANTS {

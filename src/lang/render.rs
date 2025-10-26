@@ -158,6 +158,9 @@ impl QbeRenderable for Instruction {
             Instruction::GlobalAddress(identifier) => {
                 write!(writer, "copy {}", identifier)
             }
+            Instruction::Global(identifier) => {
+                write!(writer, "loadl {}", identifier)
+            }
             Instruction::Phi(label_registers) => {
                 write!(writer, "phi")?;
                 for (pos, (label, register)) in label_registers.iter().with_position() {
