@@ -297,6 +297,9 @@ impl BuiltinSpecial {
                         arg.into_instructions(&instructions, &bindings, globals)?;
                     let value = instructions.current_register();
 
+                    let result_label = globals.next_label("arg_result");
+                    instructions = instructions.with_label(result_label.clone());
+
                     let next_label = match pos {
                         Position::Last | Position::Only => final_label.clone(),
                         _ => globals.next_label("arg"),
@@ -307,7 +310,7 @@ impl BuiltinSpecial {
                         done_label.clone(),
                     ));
 
-                    phi_labels.push((label.clone(), Value::Literal(0)));
+                    phi_labels.push((result_label.clone(), Value::Literal(0)));
 
                     last_value = Value::Register(value);
                     last_label = Some(next_label);
@@ -341,6 +344,9 @@ impl BuiltinSpecial {
                         arg.into_instructions(&instructions, &bindings, globals)?;
                     let value = instructions.current_register();
 
+                    let result_label = globals.next_label("arg_result");
+                    instructions = instructions.with_label(result_label.clone());
+
                     let next_label = match pos {
                         Position::Last | Position::Only => final_label.clone(),
                         _ => globals.next_label("arg"),
@@ -351,7 +357,7 @@ impl BuiltinSpecial {
                         next_label.clone(),
                     ));
 
-                    phi_labels.push((label.clone(), Value::Register(value)));
+                    phi_labels.push((result_label.clone(), Value::Register(value)));
 
                     last_label = Some(next_label);
                 }
@@ -410,6 +416,8 @@ impl BuiltinSpecial {
 
                 let then_label = globals.next_label("then");
                 let else_label = globals.next_label("else");
+                let then_result_label = globals.next_label("then_result");
+                let else_result_label = globals.next_label("else_result");
                 let done_label = globals.next_label("if_done");
 
                 (instructions, bindings) =
@@ -426,19 +434,27 @@ impl BuiltinSpecial {
                 (instructions, bindings) =
                     then_expr.into_instructions(&instructions, &bindings, globals)?;
                 let then = instructions.current_register();
-                instructions = instructions.with_jump(JumpInstruction::Jump(done_label.clone()));
+                instructions =
+                    instructions.with_jump(JumpInstruction::Jump(then_result_label.clone()));
 
                 instructions = instructions.with_label(else_label.clone());
                 (instructions, bindings) =
                     else_expr.into_instructions(&instructions, &bindings, globals)?;
                 let else_ = instructions.current_register();
+                instructions =
+                    instructions.with_jump(JumpInstruction::Jump(else_result_label.clone()));
+
+                instructions = instructions.with_label(then_result_label.clone());
+                instructions = instructions.with_jump(JumpInstruction::Jump(done_label.clone()));
+
+                instructions = instructions.with_label(else_result_label.clone());
                 instructions = instructions.with_jump(JumpInstruction::Jump(done_label.clone()));
 
                 instructions = instructions.with_label(done_label.clone());
                 instructions = instructions.with_instruction(Instruction::Phi(
                     [
-                        (then_label, Value::Register(then)),
-                        (else_label, Value::Register(else_)),
+                        (then_result_label, Value::Register(then)),
+                        (else_result_label, Value::Register(else_)),
                     ]
                     .into(),
                 ));

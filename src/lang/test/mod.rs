@@ -185,8 +185,18 @@ fn program_output_and() {
 }
 
 #[test]
+fn program_output_and_nested() {
+    assert_compiled_stdout_eq!("(printf \"%d\" (and 1 (and 2 3)))", "3",);
+}
+
+#[test]
 fn program_output_or() {
     assert_compiled_stdout_eq!("(printf \"%d\\n%d\" (or 0 0 0) (or 0 -10 0))", "0\n-10",);
+}
+
+#[test]
+fn program_output_or_nested() {
+    assert_compiled_stdout_eq!("(printf \"%d\" (or 0 (or 0 3)))", "3",);
 }
 
 #[test]
@@ -198,9 +208,19 @@ fn program_output_not() {
 }
 
 #[test]
+fn program_output_not_nested() {
+    assert_compiled_stdout_eq!("(printf \"%d\" (not (not 133)))", "1",);
+}
+
+#[test]
 fn program_output_if() {
     assert_compiled_stdout_eq!(
         "(printf \"%d\\n%d\\n%d\" (if 1 2 3) (if 0 2 3) (if -10 2 3) (if -10 2 (printf \"garage\")))",
         "2\n3\n2",
     );
+}
+
+#[test]
+fn program_output_if_nested() {
+    assert_compiled_stdout_eq!("(printf \"%d\" (if 0 1 (if 0 2 3)))", "3",);
 }
